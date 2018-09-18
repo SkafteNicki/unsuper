@@ -7,4 +7,13 @@ Created on Tue Sep 18 12:47:22 2018
 """
 
 #%%
-import torch
+import tensorflow as tf
+tf.enable_eager_execution()
+
+from . import helper
+from . import models
+from .models.GAN import GAN
+from .models.VAE import VAE
+
+#%%
+
