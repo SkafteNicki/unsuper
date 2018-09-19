@@ -10,6 +10,7 @@ Created on Wed Sep 19 07:49:31 2018
 import torch
 from torchvision import datasets
 from ..helper.utility import get_dir
+
 #%%
 def mnist_train_loader(batch_size, transform):
     loc = get_dir(__file__) + '/MNIST/'
