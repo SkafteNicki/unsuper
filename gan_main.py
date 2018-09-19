@@ -28,6 +28,7 @@ def argparser():
     parser.add_argument('--img_size', type=int, default=28, help='size of each image dimension')
     parser.add_argument('--channels', type=int, default=1, help='number of image channels')
     parser.add_argument('--sample_interval', type=int, default=400, help='interval betwen image samples')
+    parser.add_argument('--learning-rate', action="store", default=1e-4, type=float, help='learning rate for optimizer')
     args = parser.parse_args()
     return args
 
@@ -37,8 +38,12 @@ if __name__ == '__main__':
     args = argparser()
     
     # Get data loaders
-    train_loader = mnist_train_loader(batch_size=128, transform=transforms.ToTensor())
-    test_loader = mnist_test_loader(batch_size=128, transform=transforms.ToTensor())    
+    train_loader = mnist_train_loader(batch_size=128, transform=transforms.Compose([
+                        transforms.ToTensor(),
+                        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]))
+    test_loader = mnist_test_loader(batch_size=128, transform=transforms.Compose([
+                        transforms.ToTensor(),
+                        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]))
     input_shape = (1, 28, 28)
     
     # Define generator and discriminator
@@ -60,7 +65,7 @@ if __name__ == '__main__':
             img = img.view(img.size(0), *input_shape)
             return img
     
-        def block(in_feat, out_feat, normalize=True):
+        def block(self, in_feat, out_feat, normalize=True):
             layers = [nn.Linear(in_feat, out_feat)]
             if normalize:
                 layers.append(nn.BatchNorm1d(out_feat, 0.8))
@@ -86,7 +91,10 @@ if __name__ == '__main__':
             return validity
 
     # Define model
-    model = GAN(input_shape, latent_dim=args.latent_dim, Generator, Discriminator)
+    generator = Generator()
+    discriminator = Discriminator()
+    model = GAN(input_shape, args.latent_dim, generator, discriminator, device='cuda')
     
     # Train model
-    model.train(train_loader=train_loader, n_epochs=args.epochs, learning_rate=)
+    model.train(trainloader=train_loader, n_epochs=args.n_epochs, 
+                learning_rate=args.learning_rate, betas=(args.b1, args.b2))

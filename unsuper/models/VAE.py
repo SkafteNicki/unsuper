@@ -65,14 +65,16 @@ class VAE:
         # Make optimizers
         optimizer = torch.optim.Adam(self.combined.parameters(), lr=learning_rate)
         
-        self.combined.train() # training mode
-        train_loss = 0
+        # Main loop 
+        self.combined.train() # training mode 
         for epoch in range(n_epochs):
             progress_bar = tqdm(desc='Epoch ' + str(epoch), total=len(trainloader.dataset), 
-                                unit='samples', ncols=70)
+                                unit='samples')
+            train_loss = 0    
+            # Training loop
             for i, (data, _) in enumerate(trainloader):
-                data = data.to(self.device)
                 optimizer.zero_grad()
+                data = data.to(self.device)
                 recon_batch, mu, logvar = self.combined(data)
                 loss = self.loss_f(recon_batch, data, mu, logvar)
                 loss.backward()
@@ -80,6 +82,7 @@ class VAE:
                 optimizer.step()
                 progress_bar.update(data.size(0))
                 progress_bar.set_postfix({'loss': loss.item()})
+                
             progress_bar.set_postfix({'Average loss': train_loss / len(trainloader)})
             progress_bar.close()
             
@@ -99,8 +102,8 @@ class VAE:
     #%%
     def sample(self, n_samples):
         with torch.no_grad():
-            sample = torch.randn(n_samples, self.latent_dim).to(self.device)
-            sample = self.decoder(sample)
+            z = torch.randn(n_samples, self.latent_dim).to(self.device)
+            sample = self.decoder(z)
             sample = sample.view(-1, *self.input_shape)
         return sample
 
