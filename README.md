@@ -1,3 +1,3 @@
-# tfunsuper
+# unsuper
 
-Just me plying around with some unsupervised algorithms in tensorflow + keras
+Just me plying around with some unsupervised algorithms
