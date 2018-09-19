@@ -77,9 +77,10 @@ class GAN(object):
                 d_loss.backward()
                 optimizer_D.step()
                 
-                print ("[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]" % (epoch, opt.n_epochs, i, len(dataloader),
+                print ("[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]" % (epoch, n_epochs, i, len(dataloader),
                                                             d_loss.item(), g_loss.item()))
 
 #%%
 if __name__ == '__main__':
+    pass
                     
