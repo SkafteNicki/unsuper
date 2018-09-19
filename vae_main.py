@@ -26,6 +26,8 @@ def argparser():
                         help='enables CUDA training')
     parser.add_argument('--learning-rate', action="store", default=1e-4, type=float,
                         help='learning rate for optimizer')
+    parser.add_argument('--latent-dim', action="store", default=20, type=int,
+                        help='size of the latent space')
     args = parser.parse_args()
     return args
 
@@ -40,13 +42,13 @@ if __name__ == '__main__':
     input_shape = (1, 28, 28)
     
     # Define encoder and decoder
-    latent_dim = 20
     class Encoder(nn.Module):
-        def __init__(self):
+        def __init__(self, latent_dim):
             super(Encoder, self).__init__()
+            self.latent_dim = latent_dim
             self.fc1 = nn.Linear(784, 400)
-            self.fc2 = nn.Linear(400, latent_dim)
-            self.fc3 = nn.Linear(400, latent_dim)
+            self.fc2 = nn.Linear(400, self.latent_dim)
+            self.fc3 = nn.Linear(400, self.latent_dim)
             self.relu = nn.ReLU()
             
         def forward(self, x):
@@ -56,9 +58,10 @@ if __name__ == '__main__':
             return mu, logvar
         
     class Decoder(nn.Module):
-        def __init__(self):
+        def __init__(self, latent_dim):
             super(Decoder, self).__init__()
-            self.fc1 = nn.Linear(latent_dim, 400)
+            self.latent_dim = latent_dim
+            self.fc1 = nn.Linear(self.latent_dim, 400)
             self.fc2 = nn.Linear(400, 784)
             self.relu = nn.ReLU()
             
@@ -67,7 +70,9 @@ if __name__ == '__main__':
             return torch.sigmoid(self.fc2(h))
 
     # Define model
-    model = VAE(input_shape, latent_dim, Encoder, Decoder, device='cuda')
+    encoder = Encoder(latent_dim=args.latent_dim)
+    decoder = Decoder(latent_dim=args.latent_dim)
+    model = VAE(input_shape, args.latent_dim, encoder, decoder, device='cuda')
     
     # Train model
     model.train(train_loader, n_epochs=args.epochs, 
