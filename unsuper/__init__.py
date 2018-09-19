@@ -7,8 +7,7 @@ Created on Tue Sep 18 12:47:22 2018
 """
 
 #%%
-import tensorflow as tf
-tf.enable_eager_execution()
+import torch
 
 from . import helper
 from . import models

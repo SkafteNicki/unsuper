@@ -1,117 +1,85 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Tue Sep 18 12:48:57 2018
+Created on Wed Sep 19 06:56:08 2018
 
 @author: nsde
 """
 
 #%%
-import tensorflow as tf
-from tensorflow import keras
-import numpy as np
-from ..helper.utility import batchifier
+import torch
+from torch import nn
+from torch.autograd import Variable
 
 #%%
-class GAN:
-    def __init__(self, img_shape, latent_space = 100):
-        self.img_shape = img_shape
-        self.latent_space = latent_space
-    
-    #%%
-    def compile(self, optimizer = 'adam', learning_rate = 1e-4):
-        optimizer = tf.keras.optimizers.get(optimizer)
-        self.optimizer = optimizer(lr = learning_rate)
+class GAN(object):
+    def __init__(self, latent_dim, Generator, Discriminator, device='cpu'):
+        # Device to run on
+        self.device = torch.device(device)
+        self.latent_dim = latent_dim
         
-        # Generator
-        self.generator = self._build_generator()
+        # Initialize generator and discriminator
+        self.generator = Generator()
+        self.discriminator = Discriminator()
+        assert isinstance(Generator, nn.Module), 'Generator is not a nn.Module'
+        assert isinstance(Discriminator, nn.Module), 'Discriminator is not a nn.Module'
         
-        # Discriminator
-        self.discriminator = self._build_discriminator()
-        self.discriminator.build(loss='binary_crossentropy',
-                                 optimizer=optimizer,
-                                 metrics=['accuracy'])
+        # Loss function
+        self.loss = torch.nn.BCELoss()
         
-        # Generator takes noise as input and generates images
-        z = keras.layers.Input(shape=(self.latent_space,))
-        img = self.generator(z)
+        # Transfer to device
+        self.generator.to(self.device)
+        self.discriminator.to(self.device)
+        self.loss.to(self.device)
         
-        # For the combined model we will only train the generator
-        self.discriminator.trainable = False
+    def train(self, dataloader, n_epochs, learning_rate):
+        # Make optimizers
+        optimizer_G = torch.optim.Adam(self.generator.parameters(), lr=learning_rate)
+        optimizer_D = torch.optim.Adam(self.discriminator.meters(), lr=learning_rate)
         
-        # The discriminator takes generated images as input and determines validity
-        validity = self.discriminator(img)
-
-        # The combined model  (stacked generator and discriminator)
-        # Trains the generator to fool the discriminator
-        self.combined = keras.Model(z, validity)
-        self.combined.compile(loss='binary_crossentropy', optimizer=optimizer)
-    
-    #%%
-    def train(self, X, y, epochs = 10, batch_size = 128, ):
+        for epoch in range(n_epochs):
+            for i, (imgs, _) in enumerate(dataloader):
+                # Adversarial ground truths
+                valid = Variable(torch.Tensor(imgs.size(0), 1).fill_(1.0).to(self.device), requires_grad=False)
+                fake = Variable(torch.Tensor(imgs.size(0), 1).fill_(0.0).to(self.device), requires_grad=False)
         
-        
-        
-        for e in range(epochs):
-            valid = np.ones((batch_size, 1))
-            fake = np.zeros((batch_size, 1))
-            for i, (x_batch, y_batch) in batchifier(X, y, batch_size = batch_size):
-                # Train discriminator
-                noise = np.random.normal(0, 1, (batch_size, self.latent_space))
-                gen_imgs = self.generator.predict(noise)
-                d_loss_real = self.discriminator.train_on_batch(x_batch, valid)
-                d_loss_fake = self.discriminator.train_on_batch(gen_imgs, fake)
-                d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
+                # Configure input
+                real_imgs = Variable(imgs.to(self.device))
                 
-                # Train generator
-                noise = np.random.normal(0, 1, (batch_size, self.latent_dim))
-                g_loss = self.combined.train_on_batch(noise, valid)
-        
-    
-    #%%
-    def _build_generator(self):
-        
-        model = keras.Sequential()
+                # -----------------
+                #  Train Generator
+                # -----------------
 
-        model.add(keras.layers.Dense(256, input_dim=self.latent_dim))
-        model.add(keras.layers.LeakyReLU(alpha=0.2))
-        model.add(keras.layers.BatchNormalization(momentum=0.8))
-        model.add(keras.layers.Dense(512))
-        model.add(keras.layers.LeakyReLU(alpha=0.2))
-        model.add(keras.layers.BatchNormalization(momentum=0.8))
-        model.add(keras.layers.Dense(1024))
-        model.add(keras.layers.LeakyReLU(alpha=0.2))
-        model.add(keras.layers.BatchNormalization(momentum=0.8))
-        model.add(keras.layers.Dense(np.prod(self.img_shape), activation='tanh'))
-        model.add(keras.layers.Reshape(self.img_shape))
+                optimizer_G.zero_grad()
+            
+                # Sample noise as generator input
+                z = Variable(torch.randn(imgs.shape[0], self.latent_dim).to(self.device))
+                
+                # Generate a batch of images
+                gen_imgs = self.generator(z)
 
-        model.summary()
+                # Loss measures generator's ability to fool the discriminator
+                g_loss = self.loss(self.discriminator(gen_imgs), valid)
 
-        noise = keras.layers.Input(shape=(self.latent_dim,))
-        img = model(noise)
+                g_loss.backward()
+                optimizer_G.step()
+                
+                # ---------------------
+                #  Train Discriminator
+                # ---------------------
 
-        return keras.Model(noise, img)
-    
-    #%%        
-    def _build_discriminator(self):
-        
-        model = keras.Sequential()
+                optimizer_D.zero_grad()
 
-        model.add(keras.layers.Flatten(input_shape=self.img_shape))
-        model.add(keras.layers.Dense(512))
-        model.add(keras.layers.LeakyReLU(alpha=0.2))
-        model.add(keras.layers.Dense(256))
-        model.add(keras.layers.LeakyReLU(alpha=0.2))
-        model.add(keras.layers.Dense(1, activation='sigmoid'))
-        model.summary()
+                # Measure discriminator's ability to classify real from generated samples
+                real_loss = self.loss(self.discriminator(real_imgs), valid)
+                fake_loss = self.loss(self.discriminator(gen_imgs.detach()), fake)
+                d_loss = (real_loss + fake_loss) / 2
 
-        img = keras.layers.Input(shape=self.img_shape)
-        validity = model(img)
-
-        return keras.Model(img, validity)
-        
-    
+                d_loss.backward()
+                optimizer_D.step()
+                
+                print ("[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]" % (epoch, opt.n_epochs, i, len(dataloader),
+                                                            d_loss.item(), g_loss.item()))
 
 #%%
 if __name__ == '__main__':
-    pass
+                    
