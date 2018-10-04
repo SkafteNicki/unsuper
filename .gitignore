@@ -2,3 +2,7 @@
 __pycache__
 MNIST
 logs
+processed/
+raw/
+vae/
+vae-stn/

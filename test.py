@@ -11,11 +11,44 @@ from torch import nn
 from torch.nn import functional as F
 import numpy as np
 from torchvision import datasets, transforms
-from torchvision.utils import save_image
+from torchvision.utils import save_image, make_grid
 from tqdm import tqdm
 import os, datetime
 from tensorboardX import SummaryWriter
-   
+
+#%%
+class args:
+    model = 'vae-stn'
+    batch_size = 128
+    input_shape = (1, 28, 28)
+    n_epochs = 100
+    lr = 1e-3
+    use_cuda = True
+    warmup = 20
+
+#%%
+class only_mnist_ones(torch.utils.data.Dataset):
+    def __init__(self, train=True, transform=None, download=True):
+        from sklearn.datasets import fetch_mldata
+        index = [0, 60000] if train else [60000, 70000]
+        mnist = fetch_mldata('MNIST original')
+        data = mnist['data'][index[0]:index[1]]
+        target = mnist['target'][index[0]:index[1]]
+        self.n = np.sum(target==1)
+        only_ones = np.zeros((self.n, 784))
+        for i, idx in enumerate(np.where(target==1)):
+            only_ones[i] = data[idx]
+        self.data = only_ones
+    
+    def __len__(self):
+        return self.n
+    
+    def __getitem__(self, idx):
+        sample = self.data[idx]
+        if self.transform:
+            sample = self.transform(sample)
+        return sample
+
 #%%
 class Encoder(nn.Module):
     def __init__(self, input_shape, latent_dim, intermidian_size=400):
@@ -25,11 +58,11 @@ class Encoder(nn.Module):
         self.fc1 = nn.Linear(self.flat_dim, intermidian_size)
         self.fc2 = nn.Linear(intermidian_size, self.latent_dim)
         self.fc3 = nn.Linear(intermidian_size, self.latent_dim)
-        self.relu = nn.ReLU()
+        self.activation = nn.LeakyReLU(0.1)
         
     def forward(self, x):
         x = x.view(-1, self.flat_dim)
-        h = self.relu(self.fc1(x))
+        h = self.activation(self.fc1(x))
         mu = self.fc2(h)
         logvar = self.fc3(h)
         return mu, logvar
@@ -43,10 +76,10 @@ class Decoder(nn.Module):
         self.flat_dim = np.prod(output_shape)
         self.fc1 = nn.Linear(self.latent_dim, intermidian_size)
         self.fc2 = nn.Linear(intermidian_size, self.flat_dim)
-        self.relu = nn.ReLU()
+        self.activation = nn.LeakyReLU(0.1)
         
     def forward(self, x):
-        h  = self.relu(self.fc1(x))
+        h  = self.activation(self.fc1(x))
         out = torch.sigmoid(self.fc2(h))
         return out.view(-1, *self.output_shape)
 
@@ -130,7 +163,25 @@ class VAE_with_STN(nn.Module):
             theta = self.decoder2(z2)
             out = self.stn(dec, theta)
             return out
+    
+    def sample_only_images(self, n, trans):
+        device = next(self.parameters()).device
+        with torch.no_grad():
+            trans = trans[None, :].repeat(n, 1).to(device)
+            z1 = torch.randn(n, self.encoder1.latent_dim, device=device)
+            dec = self.decoder1(z1)
+            out = self.stn(dec, trans)
+            return out
         
+    def sample_only_trans(self, n, img):
+        device = next(self.parameters()).device
+        with torch.no_grad():
+            img = img.repeat(n, 1, 1, 1).to(device)
+            z2 = torch.randn(n, self.encoder2.latent_dim, device=device)
+            theta = self.decoder2(z2)
+            out = self.stn(img, theta)
+            return out
+    
     def latent_representation(self, x):
         mu1, logvar1 = self.encoder1(x)
         mu2, logvar2 = self.encoder2(x)
@@ -139,30 +190,20 @@ class VAE_with_STN(nn.Module):
         return z1, z2
             
 #%%
-def loss_function(kl_scaling, recon_x, x, mu, logvar):
+def loss_function(epoch, kl_scaling, recon_x, x, mu, logvar):
     BCE = F.binary_cross_entropy(recon_x, x)
     KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-    if kl_scaling: KLD /= recon_x.numel() # normalize KL divergence
+    KLD *= np.max(epoch / args.warmup, 1)
     return BCE+KLD, (BCE, KLD)
 
 #%%
-def loss_function_with_stn(kl_scaling, recon_x, x, mu1, logvar1, mu2, logvar2):
+def loss_function_with_stn(epoch, recon_x, x, mu1, logvar1, mu2, logvar2):
     BCE = F.binary_cross_entropy(recon_x, x)
     KLD1 = -0.5 * torch.sum(1 + logvar1 - mu1.pow(2) - logvar1.exp())
-    if kl_scaling: KLD1 /= recon_x.numel()
+    KLD1 *= np.max(epoch / args.warmup, 1)
     KLD2 = -0.5 * torch.sum(1 + logvar2 - mu2.pow(2) - logvar2.exp())
-    if kl_scaling: KLD2 /= recon_x.numel()
+    KLD2 *= np.max(epoch / args.warmup, 1)
     return BCE + KLD1 + KLD2, (BCE, KLD1, KLD2)
-
-#%%
-class args:
-    model = 'vae-stn'
-    batch_size = 128
-    input_shape = (1, 28, 28)
-    n_epochs = 100
-    lr = 1e-4
-    use_cuda = True
-    kl_scaling = True
 
 #%%
 if __name__ == '__main__':
@@ -189,18 +230,20 @@ if __name__ == '__main__':
         decoder = Decoder(output_shape=args.input_shape, latent_dim=20, intermidian_size=400)
         model = VAE(encoder, decoder)
         loss_f = loss_function
+        
+        # Only works for graphs where torch.nn.functional.affine_grid is not part
+        # of the graph
+        writer.add_graph(model=model, 
+                         input_to_model=torch.autograd.Variable(next(iter(trainloader))[0]))
+        
     elif args.model == 'vae-stn':
         encoder1 = Encoder(input_shape=args.input_shape, latent_dim=20, intermidian_size=400)
-        encoder2 = Encoder(input_shape=args.input_shape, latent_dim=2, intermidian_size=400)
+        encoder2 = Encoder(input_shape=args.input_shape, latent_dim=20, intermidian_size=400)
         decoder1 = Decoder(output_shape=args.input_shape, latent_dim=20, intermidian_size=400)
-        decoder2 = Decoder(output_shape=(6,), latent_dim=2, intermidian_size=4)
+        decoder2 = Decoder(output_shape=(6,), latent_dim=20, intermidian_size=10)
         stn = STN(input_shape=args.input_shape)
         model = VAE_with_STN(encoder1, encoder2, decoder1, decoder2, stn)
         loss_f = loss_function_with_stn
-    
-    # Save graph
-#    writer.add_graph(model=model, 
-#                     input_to_model=torch.autograd.Variable(next(iter(trainloader))[0]))
     
     # Move model to gpu
     if torch.cuda.is_available() and args.use_cuda:
@@ -248,10 +291,8 @@ if __name__ == '__main__':
         writer.add_scalar('test/recon_loss', recon_loss, epoch*len(trainloader) + i)
         writer.add_scalar('test/KL_loss', KL_loss, epoch*len(trainloader) + i)
         
-        
-        
         # Save some results
-        n = 15
+        n = 20
         samples = model.sample(n)
         data_train = next(iter(trainloader))[0].to(device)
         data_test = next(iter(testloader))[0].to(device)
@@ -259,7 +300,27 @@ if __name__ == '__main__':
                                 data_test[:n], model(data_test[:n])[0],
                                 samples])
         save_image(comparison.cpu(), logdir + '/samp_recon' + str(epoch) + '.png', nrow=n)
-    
+        
+        # Lets try to do it in tensorboard
+        writer.add_image('train/recon', make_grid(
+            torch.cat([data_train[:n], model(data_train[:n])[0]]).cpu(),
+            nrow=n), global_step=epoch)
+        writer.add_image('test/recon', make_grid(
+            torch.cat([data_test[:n], model(data_test[:n])[0]]).cpu(),
+            nrow=n), global_step=epoch)
+        writer.add_image('samples/samples', make_grid(samples.cpu(), nrow=n), 
+            global_step=epoch)
+        
+        if args.model == 'vae-stn':
+            trans = torch.tensor([1,0,0,0,1,0])
+            samples = model.sample_only_images(n, trans)
+            writer.add_image('samples/fixed_trans')
+            
+            img = data_train[0]
+            samples = model.sample_only_trans(n, img)
+            writer.add_image('samples/fixed_img', make_grid(samples.cpu(), nrow=n),
+                             global_step=epoch)
+        
     # TODO: generalize this
     print('Saving embeddings')
     if args.model == 'vae':
@@ -284,7 +345,7 @@ if __name__ == '__main__':
     elif args.model == 'vae-stn':
         all_data = torch.zeros(10000, 1, 28, 28, dtype=torch.float32, device=device)
         all_latent1 = torch.zeros(10000, 20, dtype=torch.float32, device=device)
-        all_latent2 = torch.zeros(10000, 2, dtype=torch.float32, device=device)
+        all_latent2 = torch.zeros(10000, 20, dtype=torch.float32, device=device)
         all_label = torch.zeros(10000, dtype=torch.int32, device=device)
         counter = 0
         for i, (data, label) in enumerate(testloader):
