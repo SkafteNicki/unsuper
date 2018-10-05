@@ -11,7 +11,7 @@ from torch import nn
 from torch.nn import functional as F
 import numpy as np
 from torchvision import datasets, transforms
-from torchvision.utils import save_image, make_grid
+from torchvision.utils import make_grid
 from tqdm import tqdm
 import os, datetime
 from tensorboardX import SummaryWriter
@@ -25,29 +25,8 @@ class args:
     lr = 1e-3
     use_cuda = True
     warmup = 20
-
-#%%
-class only_mnist_ones(torch.utils.data.Dataset):
-    def __init__(self, train=True, transform=None, download=True):
-        from sklearn.datasets import fetch_mldata
-        index = [0, 60000] if train else [60000, 70000]
-        mnist = fetch_mldata('MNIST original')
-        data = mnist['data'][index[0]:index[1]]
-        target = mnist['target'][index[0]:index[1]]
-        self.n = np.sum(target==1)
-        only_ones = np.zeros((self.n, 784))
-        for i, idx in enumerate(np.where(target==1)):
-            only_ones[i] = data[idx]
-        self.data = only_ones
-    
-    def __len__(self):
-        return self.n
-    
-    def __getitem__(self, idx):
-        sample = self.data[idx]
-        if self.transform:
-            sample = self.transform(sample)
-        return sample
+    latent_dim = 20
+    only_ones = False
 
 #%%
 class Encoder(nn.Module):
@@ -82,36 +61,6 @@ class Decoder(nn.Module):
         h  = self.activation(self.fc1(x))
         out = torch.sigmoid(self.fc2(h))
         return out.view(-1, *self.output_shape)
-
-#%%
-class VAE(nn.Module):
-    def __init__(self, encoder, decoder):
-        super(VAE, self).__init__()
-        self.encoder = encoder
-        self.decoder = decoder
-        
-    def reparameterize(self, mu, logvar):
-        if self.training:
-            std = torch.exp(0.5*logvar)
-            eps = torch.randn_like(std)
-            return eps.mul(std).add(mu)
-        else:
-            return mu
-        
-    def forward(self, x):
-        mu, logvar = self.encoder(x)
-        z = self.reparameterize(mu, logvar)
-        return self.decoder(z), (mu, logvar)
-    
-    def sample(self, n):
-        device = next(self.parameters()).device
-        with torch.no_grad():
-            z = torch.randn(n, self.decoder.latent_dim, device=device)
-            return self.decoder(z)
-            
-    def latent_representation(self, x):
-        mu, logvar = self.encoder(x)
-        return self.reparameterize(mu, logvar)
 
 #%%
 class STN(nn.Module):
@@ -152,7 +101,7 @@ class VAE_with_STN(nn.Module):
         dec = self.decoder1(z1)
         theta = self.decoder2(z2)
         out = self.stn(dec, theta)
-        return out, (mu1, logvar1, mu2, logvar2)
+        return out, mu1, logvar1, mu2, logvar2
     
     def sample(self, n):
         device = next(self.parameters()).device
@@ -188,31 +137,32 @@ class VAE_with_STN(nn.Module):
         z1 = self.reparameterize(mu1, logvar1)
         z2 = self.reparameterize(mu2, logvar2)
         return z1, z2
-            
+   
 #%%
-def loss_function(epoch, kl_scaling, recon_x, x, mu, logvar):
+def reconstruction_loss(recon_x, x):
     BCE = F.binary_cross_entropy(recon_x, x)
-    KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-    KLD *= np.max(epoch / args.warmup, 1)
-    return BCE+KLD, (BCE, KLD)
+    return BCE
 
 #%%
-def loss_function_with_stn(epoch, recon_x, x, mu1, logvar1, mu2, logvar2):
-    BCE = F.binary_cross_entropy(recon_x, x)
-    KLD1 = -0.5 * torch.sum(1 + logvar1 - mu1.pow(2) - logvar1.exp())
-    KLD1 *= np.max(epoch / args.warmup, 1)
-    KLD2 = -0.5 * torch.sum(1 + logvar2 - mu2.pow(2) - logvar2.exp())
-    KLD2 *= np.max(epoch / args.warmup, 1)
-    return BCE + KLD1 + KLD2, (BCE, KLD1, KLD2)
+def kullback_leibler_divergence(mu, logvar, epoch=1, warmup=1):
+    KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+    KLD *= np.max([epoch / warmup, 1])
+    return KLD
 
 #%%
 if __name__ == '__main__':
     logdir = args.model + '/' + datetime.datetime.now().strftime('%Y_%m_%d_%H_%M')
     if not os.path.exists(logdir): os.makedirs(logdir)
+    
     # Load data
-    train = datasets.MNIST(root='', transform=transforms.ToTensor(), download=True)
+    if args.only_ones:
+        from mnist_only_ones import MNIST_only_ones
+        train = MNIST_only_ones(root='', transform=transforms.ToTensor(), download=True)
+        test = MNIST_only_ones(root='', train=False, transform=transforms.ToTensor(), download=True)
+    else:
+        train = datasets.MNIST(root='', transform=transforms.ToTensor(), download=True)
+        test = datasets.MNIST(root='', train=False, transform=transforms.ToTensor(), download=True)
     trainloader = torch.utils.data.DataLoader(train, batch_size=args.batch_size)
-    test = datasets.MNIST(root='', train=False, transform=transforms.ToTensor(), download=True)
     testloader = torch.utils.data.DataLoader(test, batch_size=args.batch_size)
     
     # Summary writer
@@ -224,26 +174,14 @@ if __name__ == '__main__':
     else:
         device = torch.device('cpu')
     
+        
     # Construct model
-    if args.model == 'vae':
-        encoder = Encoder(input_shape=args.input_shape, latent_dim=20, intermidian_size=400)
-        decoder = Decoder(output_shape=args.input_shape, latent_dim=20, intermidian_size=400)
-        model = VAE(encoder, decoder)
-        loss_f = loss_function
-        
-        # Only works for graphs where torch.nn.functional.affine_grid is not part
-        # of the graph
-        writer.add_graph(model=model, 
-                         input_to_model=torch.autograd.Variable(next(iter(trainloader))[0]))
-        
-    elif args.model == 'vae-stn':
-        encoder1 = Encoder(input_shape=args.input_shape, latent_dim=20, intermidian_size=400)
-        encoder2 = Encoder(input_shape=args.input_shape, latent_dim=20, intermidian_size=400)
-        decoder1 = Decoder(output_shape=args.input_shape, latent_dim=20, intermidian_size=400)
-        decoder2 = Decoder(output_shape=(6,), latent_dim=20, intermidian_size=10)
-        stn = STN(input_shape=args.input_shape)
-        model = VAE_with_STN(encoder1, encoder2, decoder1, decoder2, stn)
-        loss_f = loss_function_with_stn
+    encoder1 = Encoder(input_shape=args.input_shape, latent_dim=args.latent_dim, intermidian_size=400)
+    encoder2 = Encoder(input_shape=args.input_shape, latent_dim=args.latent_dim, intermidian_size=400)
+    decoder1 = Decoder(output_shape=args.input_shape, latent_dim=args.latent_dim, intermidian_size=400)
+    decoder2 = Decoder(output_shape=(6,), latent_dim=args.latent_dim, intermidian_size=10)
+    stn = STN(input_shape=args.input_shape)
+    model = VAE_with_STN(encoder1, encoder2, decoder1, decoder2, stn)
     
     # Move model to gpu
     if torch.cuda.is_available() and args.use_cuda:
@@ -260,112 +198,104 @@ if __name__ == '__main__':
         # Training loop
         model.train()
         for i, (data, _) in enumerate(trainloader):
+            # Zero gradient
             optimizer.zero_grad()
+            
+            # Feed forward data
             data = data.reshape(-1, *args.input_shape).to(device)
-            recon_data, latents = model(data)    
-            loss, individual_loss = loss_f(args.kl_scaling, recon_data, data, *latents)
+            recon_data, mu1, logvar1, mu2, logvar2 = model(data)    
+            
+            # Calculat loss
+            recon_loss = reconstruction_loss(recon_data, data)
+            kl1_loss = kullback_leibler_divergence(mu1, logvar1, epoch, args.warmup)
+            kl2_loss = kullback_leibler_divergence(mu2, logvar2, epoch, args.warmup)
+            loss = recon_loss + kl1_loss + kl2_loss
             train_loss += loss.item()
+            
+            # Backpropegate and optimize
             loss.backward()
             optimizer.step()
+            
+            # Write to consol and tensorboard
             progress_bar.update(data.size(0))
             progress_bar.set_postfix({'loss': loss.item()})
-            writer.add_scalar('train/total_loss', loss, epoch*len(trainloader) + i)
-            writer.add_scalar('train/recon_loss', individual_loss[0], epoch*len(trainloader) + i)
-            writer.add_scalar('train/KL_loss', sum(individual_loss[1:]), epoch*len(trainloader) + i)
+            iteration = epoch*len(trainloader) + i
+            writer.add_scalar('train/total_loss', loss, iteration)
+            writer.add_scalar('train/recon_loss', recon_loss, iteration)
+            writer.add_scalar('train/KL_loss1', kl1_loss, iteration)
+            writer.add_scalar('train/KL_loss2', kl2_loss, iteration)
             
         progress_bar.set_postfix({'Average loss': train_loss / len(trainloader)})
         progress_bar.close()
         
         # Try out on test data
         model.eval()
-        test_loss, recon_loss, KL_loss = 0, 0, 0
+        recon_loss
         for i, (data, _) in enumerate(testloader):
             data = data.reshape(-1, *args.input_shape).to(device)
-            recon_data, latents = model(data)
-            loss, individual_loss = loss_f(args.kl_scaling, recon_data, data, *latents)
-            test_loss += loss
-            recon_loss += individual_loss[0]
-            KL_loss += sum(individual_loss[1:])
+            recon_data, mu1, logvar1, mu2, logvar2 = model(data)    
             
-        writer.add_scalar('test/total_loss', test_loss, epoch*len(trainloader) + i)
-        writer.add_scalar('test/recon_loss', recon_loss, epoch*len(trainloader) + i)
-        writer.add_scalar('test/KL_loss', KL_loss, epoch*len(trainloader) + i)
+            recon_loss += reconstruction_loss(recon_data, data)
+            kl1_loss += kullback_leibler_divergence(mu1, logvar1, epoch, args.warmup)
+            kl2_loss += kullback_leibler_divergence(mu2, logvar2, epoch, args.warmup)
+        test_loss = recon_loss + kl1_loss + kl2_loss
         
-        # Save some results
-        n = 20
-        samples = model.sample(n)
-        data_train = next(iter(trainloader))[0].to(device)
-        data_test = next(iter(testloader))[0].to(device)
-        comparison = torch.cat([data_train[:n], model(data_train[:n])[0],
-                                data_test[:n], model(data_test[:n])[0],
-                                samples])
-        save_image(comparison.cpu(), logdir + '/samp_recon' + str(epoch) + '.png', nrow=n)
+        writer.add_scalar('test/total_loss', test_loss, iteration)
+        writer.add_scalar('test/recon_loss', recon_loss, iteration)
+        writer.add_scalar('test/KL_loss1', kl1_loss, iteration)
+        writer.add_scalar('test/KL_loss2', kl2_loss, iteration)
         
-        # Lets try to do it in tensorboard
-        writer.add_image('train/recon', make_grid(
-            torch.cat([data_train[:n], model(data_train[:n])[0]]).cpu(),
-            nrow=n), global_step=epoch)
-        writer.add_image('test/recon', make_grid(
-            torch.cat([data_test[:n], model(data_test[:n])[0]]).cpu(),
-            nrow=n), global_step=epoch)
-        writer.add_image('samples/samples', make_grid(samples.cpu(), nrow=n), 
-            global_step=epoch)
+        # Lets save samples + reconstruction to tensorboard
+        n = 20    
+        data_train = next(iter(trainloader))[0].to(device)[:n]
+        data_test = next(iter(testloader))[0].to(device)[:n]
+        recon_data_train = model(data_train)[0]
+        recon_data_test = model(data_test)[0]
         
-        if args.model == 'vae-stn':
-            trans = torch.tensor([1,0,0,0,1,0])
-            samples = model.sample_only_images(n, trans)
-            writer.add_image('samples/fixed_trans')
-            
-            img = data_train[0]
-            samples = model.sample_only_trans(n, img)
-            writer.add_image('samples/fixed_img', make_grid(samples.cpu(), nrow=n),
-                             global_step=epoch)
-        
-    # TODO: generalize this
-    print('Saving embeddings')
-    if args.model == 'vae':
-        all_data = torch.zeros(10000, 1, 28, 28, dtype=torch.float32, device=device)
-        all_latent = torch.zeros(10000, 20, dtype=torch.float32, device=device)
-        all_label = torch.zeros(10000, dtype=torch.int32, device=device)
-        counter = 0
-        for i, (data, label) in enumerate(testloader):
-            n = data.shape[0]
-            data = data.reshape(-1, *args.input_shape).to(device)
-            label = label.to(device)
-            z, _ = encoder(data)
-            all_data[counter:counter+n] = data
-            all_latent[counter:counter+n] = z
-            all_label[counter:counter+n] = label
-            counter += n
-        writer.add_embedding(mat = all_latent,
-                             metadata= all_label,
-                             label_img= all_data,
-                             tag = 'latent_space')
+        writer.add_image('train/recon', make_grid(torch.cat([data_train, 
+                         recon_data_train]).cpu(), nrow=n), global_step=epoch)
+        writer.add_image('test/recon', make_grid(torch.cat([data_test, 
+                         recon_data_test]).cpu(), nrow=n), global_step=epoch)
     
-    elif args.model == 'vae-stn':
-        all_data = torch.zeros(10000, 1, 28, 28, dtype=torch.float32, device=device)
-        all_latent1 = torch.zeros(10000, 20, dtype=torch.float32, device=device)
-        all_latent2 = torch.zeros(10000, 20, dtype=torch.float32, device=device)
-        all_label = torch.zeros(10000, dtype=torch.int32, device=device)
-        counter = 0
-        for i, (data, label) in enumerate(testloader):
-            n = data.shape[0]
-            data = data.reshape(-1, *args.input_shape).to(device)
-            label = label.to(device)
-            z1, _ = encoder1(data)
-            z2, _ = encoder2(data)
-            all_data[counter:counter+n] = data
-            all_latent1[counter:counter+n] = z1
-            all_latent2[counter:counter+n] = z2
-            all_label[counter:counter+n] = label
-            counter += n
-            
-        writer.add_embedding(mat = all_latent1,
-                             metadata = all_label,
-                             label_img = all_data,
-                             tag = 'latent_space1')
-        writer.add_embedding(mat = all_latent2,
-                             metadata = all_label,
-                             label_img = all_data,
-                             tag = 'latent_space2')
+        samples = model.sample(n)    
+        writer.add_image('samples/samples', make_grid(samples.cpu(), nrow=n), 
+                         global_step=epoch)
+        
+        trans = torch.tensor([1.0,0,0,0,1.0,0])
+        samples = model.sample_only_images(n, trans)
+        writer.add_image('samples/fixed_trans', make_grid(samples.cpu(), nrow=n),
+                         global_step=epoch)
+        
+        img = data_train[0]
+        samples = model.sample_only_trans(n, img)
+        writer.add_image('samples/fixed_img', make_grid(samples.cpu(), nrow=n),
+                         global_step=epoch)
+        
+    # Save some embeddings
+    print('Saving embeddings')
+    all_data = torch.zeros(10000, 1, 28, 28, dtype=torch.float32, device=device)
+    all_latent1 = torch.zeros(10000, 20, dtype=torch.float32, device=device)
+    all_latent2 = torch.zeros(10000, 20, dtype=torch.float32, device=device)
+    all_label = torch.zeros(10000, dtype=torch.int32, device=device)
+    counter = 0
+    for i, (data, label) in enumerate(testloader):
+        n = data.shape[0]
+        data = data.reshape(-1, *args.input_shape).to(device)
+        label = label.to(device)
+        z1, _ = encoder1(data)
+        z2, _ = encoder2(data)
+        all_data[counter:counter+n] = data
+        all_latent1[counter:counter+n] = z1
+        all_latent2[counter:counter+n] = z2
+        all_label[counter:counter+n] = label
+        counter += n
+        
+    writer.add_embedding(mat = all_latent1,
+                         metadata = all_label,
+                         label_img = all_data,
+                         tag = 'latent_space1')
+    writer.add_embedding(mat = all_latent2,
+                         metadata = all_label,
+                         label_img = all_data,
+                         tag = 'latent_space2')
     writer.close()
