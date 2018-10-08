@@ -22,11 +22,13 @@ class args:
     batch_size = 128
     input_shape = (1, 28, 28)
     n_epochs = 100
-    lr = 1e-3
+    lr = 1e-4
     use_cuda = True
-    warmup = 20
+    warmup = 100
     latent_dim = 20
-    only_ones = False
+    only_ones = True
+    n_show = 10
+    numel = batch_size*np.prod(input_shape)
 
 #%%
 class Encoder(nn.Module):
@@ -145,8 +147,9 @@ def reconstruction_loss(recon_x, x):
 
 #%%
 def kullback_leibler_divergence(mu, logvar, epoch=1, warmup=1):
+    scaling = 0.1#1.0/float(args.numel) #np.min([epoch / warmup, 1])
     KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-    KLD *= np.max([epoch / warmup, 1])
+    KLD *= scaling
     return KLD
 
 #%%
@@ -246,7 +249,7 @@ if __name__ == '__main__':
         writer.add_scalar('test/KL_loss2', kl2_loss, iteration)
         
         # Lets save samples + reconstruction to tensorboard
-        n = 20    
+        n = args.n_show
         data_train = next(iter(trainloader))[0].to(device)[:n]
         data_test = next(iter(testloader))[0].to(device)[:n]
         recon_data_train = model(data_train)[0]
