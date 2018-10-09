@@ -13,7 +13,7 @@ import numpy as np
 from torchvision import datasets, transforms
 from torchvision.utils import make_grid
 from tqdm import tqdm
-import os, datetime
+import os, datetime, time
 from tensorboardX import SummaryWriter
 
 #%%
@@ -21,14 +21,13 @@ class args:
     model = 'vae-stn'
     batch_size = 128
     input_shape = (1, 28, 28)
-    n_epochs = 100
+    n_epochs = 500
     lr = 1e-4
     use_cuda = True
-    warmup = 100
+    warmup = 200
     latent_dim = 20
     only_ones = True
     n_show = 10
-    numel = batch_size*np.prod(input_shape)
 
 #%%
 class Encoder(nn.Module):
@@ -55,15 +54,33 @@ class Decoder(nn.Module):
         self.latent_dim = latent_dim
         self.output_shape = output_shape
         self.flat_dim = np.prod(output_shape)
+        self.activation = nn.LeakyReLU(0.1)
         self.fc1 = nn.Linear(self.latent_dim, intermidian_size)
         self.fc2 = nn.Linear(intermidian_size, self.flat_dim)
-        self.activation = nn.LeakyReLU(0.1)
         
     def forward(self, x):
         h  = self.activation(self.fc1(x))
         out = torch.sigmoid(self.fc2(h))
         return out.view(-1, *self.output_shape)
 
+#%%
+class NewDecoder(nn.Module):
+    def __init__(self, output_shape, latent_dim, intermidian_size=400):
+        super(NewDecoder, self).__init__()
+        self.latent_dim = latent_dim
+        self.output_shape = output_shape
+        self.flat_dim = np.prod(output_shape)
+        self.activation = nn.LeakyReLU(0.1)
+        self.fc1 = nn.Linear(self.latent_dim, intermidian_size)
+        self.fc2 = nn.Linear(intermidian_size, self.flat_dim)
+        self.fc2.weight = torch.nn.Parameter(torch.zeros_like(self.fc2.weight))
+        self.fc2.bias = torch.nn.Parameter(torch.tensor([1.0,0,0,0,1.0,0]))
+        
+    def forward(self, x):
+        h = self.activation(self.fc1(x))
+        out = self.activation(self.fc2(h))
+        return out.view(-1, *self.output_shape)
+        
 #%%
 class STN(nn.Module):
     def __init__(self, input_shape):
@@ -139,15 +156,22 @@ class VAE_with_STN(nn.Module):
         z1 = self.reparameterize(mu1, logvar1)
         z2 = self.reparameterize(mu2, logvar2)
         return z1, z2
+    
+    def sample_transformation(self, n):
+        device = next(self.parameters()).device
+        with torch.no_grad():
+            z2 = torch.randn(n, self.encoder2.latent_dim, device=device)
+            theta = self.decoder2(z2)
+            return theta
    
 #%%
 def reconstruction_loss(recon_x, x):
-    BCE = F.binary_cross_entropy(recon_x, x)
+    BCE = F.binary_cross_entropy(recon_x, x, reduction='sum')
     return BCE
 
 #%%
 def kullback_leibler_divergence(mu, logvar, epoch=1, warmup=1):
-    scaling = 0.1#1.0/float(args.numel) #np.min([epoch / warmup, 1])
+    scaling = np.min([epoch / warmup, 1])
     KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
     KLD *= scaling
     return KLD
@@ -182,7 +206,8 @@ if __name__ == '__main__':
     encoder1 = Encoder(input_shape=args.input_shape, latent_dim=args.latent_dim, intermidian_size=400)
     encoder2 = Encoder(input_shape=args.input_shape, latent_dim=args.latent_dim, intermidian_size=400)
     decoder1 = Decoder(output_shape=args.input_shape, latent_dim=args.latent_dim, intermidian_size=400)
-    decoder2 = Decoder(output_shape=(6,), latent_dim=args.latent_dim, intermidian_size=10)
+    decoder2 = NewDecoder(output_shape=(6,), latent_dim=args.latent_dim, intermidian_size=10)
+    
     stn = STN(input_shape=args.input_shape)
     model = VAE_with_STN(encoder1, encoder2, decoder1, decoder2, stn)
     
@@ -194,6 +219,7 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     
     # Main loop
+    start = time.time()
     for epoch in range(1, args.n_epochs+1):
         progress_bar = tqdm(desc='Epoch ' + str(epoch), total=len(trainloader.dataset), 
                                 unit='samples')
@@ -248,7 +274,7 @@ if __name__ == '__main__':
         writer.add_scalar('test/KL_loss1', kl1_loss, iteration)
         writer.add_scalar('test/KL_loss2', kl2_loss, iteration)
         
-        # Lets save samples + reconstruction to tensorboard
+        # Save reconstructions to tensorboard
         n = args.n_show
         data_train = next(iter(trainloader))[0].to(device)[:n]
         data_test = next(iter(testloader))[0].to(device)[:n]
@@ -259,27 +285,39 @@ if __name__ == '__main__':
                          recon_data_train]).cpu(), nrow=n), global_step=epoch)
         writer.add_image('test/recon', make_grid(torch.cat([data_test, 
                          recon_data_test]).cpu(), nrow=n), global_step=epoch)
-    
-        samples = model.sample(n)    
+        
+        # Save sample to tensorboard
+        samples = model.sample(n*n)    
         writer.add_image('samples/samples', make_grid(samples.cpu(), nrow=n), 
                          global_step=epoch)
         
         trans = torch.tensor([1.0,0,0,0,1.0,0])
-        samples = model.sample_only_images(n, trans)
+        samples = model.sample_only_images(n*n, trans)
         writer.add_image('samples/fixed_trans', make_grid(samples.cpu(), nrow=n),
                          global_step=epoch)
         
         img = data_train[0]
-        samples = model.sample_only_trans(n, img)
+        samples = model.sample_only_trans(n*n, img)
         writer.add_image('samples/fixed_img', make_grid(samples.cpu(), nrow=n),
                          global_step=epoch)
         
+        # Lets log a histogram of the transformation
+        theta = model.sample_transformation(1000)
+        for i in range(6):
+            writer.add_histogram('transformation/a' + str(i), theta[:,i], global_step=epoch)
+        
+        # Lets plot the mean of the transformation
+        writer.add_image('transformation/mean', global_step=epoch, 
+                         img_tensor=stn(img[None], theta.mean(dim=0, keepdim=True)))
+        
+    print('Total train time', time.time() - start)
+    
     # Save some embeddings
     print('Saving embeddings')
-    all_data = torch.zeros(10000, 1, 28, 28, dtype=torch.float32, device=device)
-    all_latent1 = torch.zeros(10000, 20, dtype=torch.float32, device=device)
-    all_latent2 = torch.zeros(10000, 20, dtype=torch.float32, device=device)
-    all_label = torch.zeros(10000, dtype=torch.int32, device=device)
+    all_data = torch.zeros(len(test), *args.input_shape, dtype=torch.float32, device=device)
+    all_latent1 = torch.zeros(len(test), args.latent_dim, dtype=torch.float32, device=device)
+    all_latent2 = torch.zeros(len(test), args.latent_dim, dtype=torch.float32, device=device)
+    all_label = torch.zeros(len(test), dtype=torch.int32, device=device)
     counter = 0
     for i, (data, label) in enumerate(testloader):
         n = data.shape[0]
