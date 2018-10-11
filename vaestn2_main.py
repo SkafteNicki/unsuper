@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue Oct  2 09:01:59 2018
+Created on Tue Oct  9 07:14:40 2018
 
 @author: nsde
 """
@@ -27,7 +27,7 @@ class args:
     use_cuda = True
     warmup = 200
     latent_dim = 20
-    only_ones = False
+    only_ones = True
     n_show = 10
 
 #%%
@@ -56,7 +56,13 @@ class Encoder(nn.Module):
         mu = self.fc2(h)
         logvar = F.softplus(self.fc3(h))
         return mu, logvar
-   
+
+#%%
+class NewEncoder(nn.Module):
+    def __init__(self, input_shape, latent_dim):
+        self.latent = latent_dim
+        #self. nn.Conv
+
 #%%     
 class Decoder(nn.Module):
     def __init__(self, output_shape, latent_dim, intermidian_size=400):
@@ -104,7 +110,6 @@ class STN(nn.Module):
         grid = F.affine_grid(theta, output_size)
         x = F.grid_sample(x, grid)
         return x
-    
 #%%
 class VAE_with_STN(nn.Module):
     def __init__(self, encoder1, encoder2, decoder1, decoder2, stn):
@@ -124,25 +129,28 @@ class VAE_with_STN(nn.Module):
             return mu
         
     def forward(self, x):
-        mu1, logvar1 = self.encoder1(x)
+        # Encode to transformer space
         mu2, logvar2 = self.encoder2(x)
-        z1 = self.reparameterize(mu1, logvar1)
         z2 = self.reparameterize(mu2, logvar2)
-        dec = self.decoder1(z1)
+        
+        # Decode transformation
         theta = self.decoder2(z2)
-        out = self.stn(dec, theta)
-        return out, mu1, logvar1, mu2, logvar2
-    
-    def sample(self, n):
-        device = next(self.parameters()).device
-        with torch.no_grad():
-            z1 = torch.randn(n, self.encoder1.latent_dim, device=device)
-            z2 = torch.randn(n, self.encoder2.latent_dim, device=device)
-            dec = self.decoder1(z1)
-            theta = self.decoder2(z2)
-            out = self.stn(dec, theta)
-            return out
-    
+        
+        # Call STN with inverse transformation
+        x_new = self.stn(x, -theta)
+        
+        # Encode image
+        mu1, logvar1 = self.encoder1(x_new)
+        z1 = self.reparameterize(mu1, logvar1)
+        
+        # Decode image
+        dec = self.decoder1(z1)
+        
+        # Use inverse transformation to "detransform image"
+        recon = self.stn(dec, theta)
+        
+        return recon, mu1, logvar1, mu2, logvar2
+        
     def sample_only_images(self, n, trans):
         device = next(self.parameters()).device
         with torch.no_grad():
@@ -175,7 +183,7 @@ class VAE_with_STN(nn.Module):
             theta = self.decoder2(z2)
             theta = expm(theta.reshape(-1, 2, 3))
             return theta.reshape(-1, 6)
-   
+    
 #%%
 def reconstruction_loss(recon_x, x):
     BCE = F.binary_cross_entropy(recon_x, x, reduction='sum')
@@ -183,7 +191,9 @@ def reconstruction_loss(recon_x, x):
 
 #%%
 def kullback_leibler_divergence(mu, logvar, epoch=1, warmup=1):
+    scaling = np.min([epoch / warmup, 1])
     KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+    KLD *= scaling
     return KLD
 
 #%%
@@ -223,10 +233,6 @@ if __name__ == '__main__':
     
     stn = STN(input_shape=args.input_shape)
     model = VAE_with_STN(encoder1, encoder2, decoder1, decoder2, stn)
-    
-    # Move model to gpu
-    if torch.cuda.is_available() and args.use_cuda:
-        model.cuda()
     
     # Optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
