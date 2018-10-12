@@ -110,20 +110,10 @@ def read_label_file(path):
         return torch.from_numpy(parsed).view(length).long()        
 
 #%%
-class MNIST_only_ones(data.Dataset):
-    """`MNIST <http://yann.lecun.com/exdb/mnist/>`_ Dataset.
-    Args:
-        root (string): Root directory of dataset where ``processed/training.pt``
-            and  ``processed/test.pt`` exist.
-        train (bool, optional): If True, creates dataset from ``training.pt``,
-            otherwise from ``test.pt``.
-        download (bool, optional): If true, downloads the dataset from the internet and
-            puts it in root directory. If dataset is already downloaded, it is not
-            downloaded again.
-        transform (callable, optional): A function/transform that  takes in an PIL image
-            and returns a transformed version. E.g, ``transforms.RandomCrop``
-        target_transform (callable, optional): A function/transform that takes in the
-            target and transforms it.
+class MNIST(data.Dataset):
+    """ Specialized version of the torchvision.datasets.MNIST class that takes
+        one additional argument "classes". This is a list of the classes that
+        should be included in the dataset.
     """
     urls = [
         'http://yann.lecun.com/exdb/mnist/train-images-idx3-ubyte.gz',
@@ -133,9 +123,9 @@ class MNIST_only_ones(data.Dataset):
     ]
     training_file = 'training.pt'
     test_file = 'test.pt'
-    classes = ['1 - one']
 
-    def __init__(self, root, train=True, transform=None, target_transform=None, download=False):
+    def __init__(self, root, train=True, transform=None, target_transform=None, 
+                 download=False, classes=[0,1,2,3,4,5,6,7,8,9]):
         self.root = os.path.expanduser(root)
         self.transform = transform
         self.target_transform = target_transform
@@ -153,12 +143,16 @@ class MNIST_only_ones(data.Dataset):
         else:
             data_file = self.test_file
         self.data, self.targets = torch.load(os.path.join(self.processed_folder, data_file))
-        n = np.sum((self.targets == 1).numpy())
+        
+        # Extract only the wanted classes
+        n = sum([self.targets==c for c in classes]).sum().item()
         newdata = torch.zeros(n, *self.data.shape[1:], dtype=self.data.dtype)
-        for i, idx in enumerate(np.where((self.targets == 1).numpy())[0]):
+        newtargets = torch.zeros(n, dtype=self.targets.dtype)
+        for i, idx in enumerate(np.where(sum([self.targets==c for c in classes]).numpy())[0]):
             newdata[i] = self.data[idx]
+            newtargets[i] = self.targets[idx]
         self.data = newdata
-        self.targets = torch.ones(n)
+        self.targets = newtargets
         
     def __getitem__(self, index):
         """
@@ -191,10 +185,6 @@ class MNIST_only_ones(data.Dataset):
     @property
     def processed_folder(self):
         return os.path.join(self.root, self.__class__.__name__, 'processed')
-
-    @property
-    def class_to_idx(self):
-        return {_class: i for i, _class in enumerate(self.classes)}
 
     def _check_exists(self):
         return os.path.exists(os.path.join(self.processed_folder, self.training_file)) and \
@@ -257,4 +247,4 @@ class MNIST_only_ones(data.Dataset):
 
 #%%
 if __name__ == '__main__':
-    data = MNIST_only_ones(root='', train=True, download=True)
+    data = MNIST(root='', train=False, download=True)
