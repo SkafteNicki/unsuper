@@ -1,8 +1,4 @@
 .spyproject
 __pycache__
-MNIST
-logs
-processed/
-raw/
-vae/
-vae-stn/
+MNIST/
+res/
