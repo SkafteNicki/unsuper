@@ -26,69 +26,59 @@ class args:
     lr = 1e-4
     use_cuda = True
     warmup = 200
-    latent_dim = 20
+    latent_dim = 32
     only_ones = False
     n_show = 10
 
 #%%
-def expm(theta):
-    n_theta = theta.shape[0]
-    zero_row = torch.zeros(n_theta, 1, 3, dtype=theta.dtype, device=theta.device)
-    theta = torch.cat([theta, zero_row], dim=1)
-    theta = torch_expm(theta)
-    theta = theta[:,:2,:]
-    return theta
-
-#%%
 class Encoder(nn.Module):
-    def __init__(self, input_shape, latent_dim, intermidian_size=400):
+    def __init__(self, input_shape, latent_dim=32, h_size=[256, 128, 64]):
         super(Encoder, self).__init__()
         self.latent_dim = latent_dim
         self.flat_dim = np.prod(input_shape)
-        self.fc1 = nn.Linear(self.flat_dim, intermidian_size)
-        self.fc2 = nn.Linear(intermidian_size, self.latent_dim)
-        self.fc3 = nn.Linear(intermidian_size, self.latent_dim)
+        self.fc_layers = [nn.Linear(self.flat_dim, h_size[0])]
+        for i in range(1, len(h_size)):
+            self.fc_layers.append(nn.Linear(h_size[i-1], h_size[i]))
+        self.fc_layers.append(nn.Linear(h_size[-1], self.latent_dim))
+        self.fc_layers.append(nn.Linear(h_size[-1], self.latent_dim))
         self.activation = nn.LeakyReLU(0.1)
+        self.paramlist = nn.ParameterList()
+        for l in self.fc_layers:
+            for p in l.parameters():
+                self.paramlist.append(p)
         
     def forward(self, x):
-        x = x.view(-1, self.flat_dim)
-        h = self.activation(self.fc1(x))
-        mu = self.fc2(h)
-        logvar = F.softplus(self.fc3(h))
+        h = x.view(-1, self.flat_dim)
+        for i in range(len(self.fc_layers)-2):
+            h = self.activation(self.fc_layers[i](h))
+        mu = self.fc_layers[-2](h)
+        logvar = F.softplus(self.fc_layers[-1](h))
         return mu, logvar
-   
+        
 #%%     
 class Decoder(nn.Module):
-    def __init__(self, output_shape, latent_dim, intermidian_size=400):
+    def __init__(self, output_shape, latent_dim=32, h_size=[64, 128, 256], 
+                 end_activation=torch.sigmoid):
         super(Decoder, self).__init__()
         self.latent_dim = latent_dim
         self.output_shape = output_shape
         self.flat_dim = np.prod(output_shape)
         self.activation = nn.LeakyReLU(0.1)
-        self.fc1 = nn.Linear(self.latent_dim, intermidian_size)
-        self.fc2 = nn.Linear(intermidian_size, self.flat_dim)
+        self.end_activation = end_activation
+        self.fc_layers = [nn.Linear(self.latent_dim, h_size[0])]
+        for i in range(1, len(h_size)):
+            self.fc_layers.append(nn.Linear(h_size[i-1], h_size[i]))
+        self.fc_layers.append(nn.Linear(h_size[-1], self.flat_dim))
+        self.paramlist = nn.ParameterList()
+        for l in self.fc_layers:
+            for p in l.parameters():
+                self.paramlist.append(p)
         
     def forward(self, x):
-        h  = self.activation(self.fc1(x))
-        out = torch.sigmoid(self.fc2(h))
-        return out.view(-1, *self.output_shape)
-
-#%%
-class NewDecoder(nn.Module):
-    def __init__(self, output_shape, latent_dim, intermidian_size=400):
-        super(NewDecoder, self).__init__()
-        self.latent_dim = latent_dim
-        self.output_shape = output_shape
-        self.flat_dim = np.prod(output_shape)
-        self.activation = nn.LeakyReLU(0.1)
-        self.fc1 = nn.Linear(self.latent_dim, intermidian_size)
-        self.fc2 = nn.Linear(intermidian_size, self.flat_dim)
-        self.fc2.weight = torch.nn.Parameter(1e-6*torch.randn_like(self.fc2.weight))
-        self.fc2.bias = torch.nn.Parameter(1e-6*torch.randn_like(self.fc2.bias))
-        
-    def forward(self, x):
-        h = self.activation(self.fc1(x))
-        out = self.activation(self.fc2(h))
+        h  = self.activation(self.fc_layers[0](x))
+        for i in range(1, len(self.fc_layers)-1):
+            h = self.activation(self.fc_layers[i](h))
+        out = self.end_activation(self.fc_layers[-1](h))
         return out.view(-1, *self.output_shape)
         
 #%%
@@ -182,13 +172,13 @@ def reconstruction_loss(recon_x, x):
     return BCE
 
 #%%
-def kullback_leibler_divergence(mu, logvar, epoch=1, warmup=1):
+def kullback_leibler_divergence(mu, logvar):
     KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
     return KLD
 
 #%%
 def kl_scaling(epoch=1, warmup=1):
-    return np.min([epoch / warmup, 1])
+    return float(np.min([epoch / warmup, 1]))
 
 #%%
 if __name__ == '__main__':
@@ -216,10 +206,14 @@ if __name__ == '__main__':
         device = torch.device('cpu')
         
     # Construct model
-    encoder1 = Encoder(input_shape=args.input_shape, latent_dim=args.latent_dim, intermidian_size=400)
-    encoder2 = Encoder(input_shape=args.input_shape, latent_dim=args.latent_dim, intermidian_size=400)
-    decoder1 = Decoder(output_shape=args.input_shape, latent_dim=args.latent_dim, intermidian_size=400)
-    decoder2 = NewDecoder(output_shape=(6,), latent_dim=args.latent_dim, intermidian_size=10)
+    encoder1 = Encoder(input_shape=args.input_shape, latent_dim=args.latent_dim,
+                       h_size=[256, 128, 64])
+    encoder2 = Encoder(input_shape=args.input_shape, latent_dim=args.latent_dim,
+                       h_size=[256, 128, 64])
+    decoder1 = Decoder(output_shape=args.input_shape, latent_dim=args.latent_dim,
+                       h_size=[256, 128, 64], end_activation=torch.sigmoid)
+    decoder2 = Decoder(output_shape=(6,), latent_dim=args.latent_dim,
+                       h_size=[256, 128, 64], end_activation=torch.nn.LeakyReLU(0.1))
     
     stn = STN(input_shape=args.input_shape)
     model = VAE_with_STN(encoder1, encoder2, decoder1, decoder2, stn)
@@ -279,9 +273,9 @@ if __name__ == '__main__':
             recon_data, mu1, logvar1, mu2, logvar2 = model(data)    
             
             recon_loss += reconstruction_loss(recon_data, data)
-            kl1_loss += kullback_leibler_divergence(mu1, logvar1, epoch, args.warmup)
-            kl2_loss += kullback_leibler_divergence(mu2, logvar2, epoch, args.warmup)
-        test_loss = recon_loss + kl1_loss + kl2_loss
+            kl1_loss += kullback_leibler_divergence(mu1, logvar1)
+            kl2_loss += kullback_leibler_divergence(mu2, logvar2)
+        test_loss = recon_loss + weight*kl1_loss + weight*kl2_loss
         
         writer.add_scalar('test/total_loss', test_loss, iteration)
         writer.add_scalar('test/recon_loss', recon_loss, iteration)

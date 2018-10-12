@@ -39,63 +39,53 @@ def expm(theta):
     theta = theta[:,:2,:]
     return theta
 
+
+
+#%%
+def Flatten(input):
+    return input.view(input.size(0), -1)            
+
 #%%
 class Encoder(nn.Module):
-    def __init__(self, input_shape, latent_dim, intermidian_size=400):
-        super(Encoder, self).__init__()
-        self.latent_dim = latent_dim
-        self.flat_dim = np.prod(input_shape)
-        self.fc1 = nn.Linear(self.flat_dim, intermidian_size)
-        self.fc2 = nn.Linear(intermidian_size, self.latent_dim)
-        self.fc3 = nn.Linear(intermidian_size, self.latent_dim)
-        self.activation = nn.LeakyReLU(0.1)
-        
-    def forward(self, x):
-        x = x.view(-1, self.flat_dim)
-        h = self.activation(self.fc1(x))
-        mu = self.fc2(h)
-        logvar = F.softplus(self.fc3(h))
-        return mu, logvar
-
-#%%
-class NewEncoder(nn.Module):
     def __init__(self, input_shape, latent_dim):
+        super(Encoder, self).__init__()
         self.latent = latent_dim
-        #self. nn.Conv
+        self.conv1 = nn.Conv2d(1, 32, 3, padding=2)
+        self.conv2 = nn.Conv2d(32, 64, 3, padding=2)
+        self.conv3 = nn.Conv2d(64, 64, 3, padding=2)
+        self.fc1 = nn.Linear(self.flat_dim, 32)
+        self.fc2 = nn.Linear(32, latent_dim)
+        self.fc3 = nn.Linear(32, latent_dim)
+        self.activation = nn.LeakyReLU(0.1)
 
-#%%     
+    def forward(self, x):
+        h1 = self.activation(self.conv1(x))
+        h2 = self.activation(self.conv2(h1))
+        h3 = self.activation(self.conv3(h2))
+        h4 = self.activation(self.fc1(Flatten(h3)))
+        mu = self.fc2(h4)
+        logvar = F.softplus(self.fc3(h4))
+        return mu, logvar
+        
+#%%
 class Decoder(nn.Module):
-    def __init__(self, output_shape, latent_dim, intermidian_size=400):
+    def __init__(self, output_shape, latent_dim, end_activation=torch.sigmoid):
         super(Decoder, self).__init__()
         self.latent_dim = latent_dim
         self.output_shape = output_shape
         self.flat_dim = np.prod(output_shape)
+        self.fc = nn.Linear(latent_dim, self.flat_dim)
+        self.conv1 = nn.ConvTranspose2d(32, 3, padding=2)
+        self.conv2 = nn.Conv2d(3, 1, padding=2)
         self.activation = nn.LeakyReLU(0.1)
-        self.fc1 = nn.Linear(self.latent_dim, intermidian_size)
-        self.fc2 = nn.Linear(intermidian_size, self.flat_dim)
+        self.end_activation = end_activation
         
     def forward(self, x):
-        h  = self.activation(self.fc1(x))
-        out = torch.sigmoid(self.fc2(h))
-        return out.view(-1, *self.output_shape)
-
-#%%
-class NewDecoder(nn.Module):
-    def __init__(self, output_shape, latent_dim, intermidian_size=400):
-        super(NewDecoder, self).__init__()
-        self.latent_dim = latent_dim
-        self.output_shape = output_shape
-        self.flat_dim = np.prod(output_shape)
-        self.activation = nn.LeakyReLU(0.1)
-        self.fc1 = nn.Linear(self.latent_dim, intermidian_size)
-        self.fc2 = nn.Linear(intermidian_size, self.flat_dim)
-        self.fc2.weight = torch.nn.Parameter(1e-6*torch.randn_like(self.fc2.weight))
-        self.fc2.bias = torch.nn.Parameter(1e-6*torch.randn_like(self.fc2.bias))
-        
-    def forward(self, x):
-        h = self.activation(self.fc1(x))
-        out = self.activation(self.fc2(h))
-        return out.view(-1, *self.output_shape)
+        h1 = self.activation(self.fc(x))
+        h2 = h1.view(h1.shape[0], *self.output_shape)
+        h2 = self.activation(self.conv1(h2))
+        h3 = self.end_activation(self.conv2(h2))
+        return h3
         
 #%%
 class STN(nn.Module):
@@ -110,6 +100,7 @@ class STN(nn.Module):
         grid = F.affine_grid(theta, output_size)
         x = F.grid_sample(x, grid)
         return x
+    
 #%%
 class VAE_with_STN(nn.Module):
     def __init__(self, encoder1, encoder2, decoder1, decoder2, stn):
