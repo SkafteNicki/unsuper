@@ -11,10 +11,10 @@ from torch import nn
 
 #%%
 class VAE(nn.Module):
-    def __init__(self, encoder1, encoder2):
+    def __init__(self, encoder, decoder):
         super(VAE, self).__init__()
-        self.encoder1 = encoder1
-        self.encoder2 = encoder2
+        self.encoder = encoder
+        self.decoder = decoder
         
     def reparameterize(self, mu, logvar):
         if self.training:
@@ -25,19 +25,23 @@ class VAE(nn.Module):
             return mu
         
     def forward(self, x):
-        mu, logvar = self.encoder1(x)
+        mu, logvar = self.encoder(x)
         z = self.reparameterize(mu, logvar)
-        out = self.decoder1(z)
-        return out, mu, logvar
+        out = self.decoder(z)
+        return out, [mu], [logvar]
     
     def sample(self, n):
         device = next(self.parameters()).device
         with torch.no_grad():
             z = torch.randn(n, self.encoder.latent_dim, device=device)
-            out = self.decoder1(z)
+            out = self.decoder(z)
             return out
        
     def latent_representation(self, x):
         mu, logvar = self.encoder(x)
         z = self.reparameterize(mu, logvar)
-        return z, z
+        return z
+    
+#%%
+if __name__ == '__main__':
+    model = VAE(None, None)

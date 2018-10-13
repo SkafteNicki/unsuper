@@ -9,7 +9,7 @@ Created on Fri Oct 12 12:04:43 2018
 import torch
 from torch import nn
 from torch.nn import functional as F
-from expm import torch_expm
+from .expm import torch_expm
 
 #%%
 def _expm(theta):

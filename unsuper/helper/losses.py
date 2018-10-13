@@ -17,10 +17,14 @@ def reconstruction_loss(recon_x, x):
     return BCE
 
 #%%
-def kullback_leibler_divergence(mu, logvar):
-    KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+def kullback_leibler_divergence(mus, logvars):
+    KLD = [-0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp()) for
+           mu, logvar in zip(mus, logvars)]
     return KLD
 
 #%%
-def kl_scaling(epoch=1, warmup=1):
-    return float(np.min([epoch / warmup, 1]))
+def kl_scaling(epoch=None, warmup=None):
+    if epoch is None or warmup is None:
+        return 1
+    else:
+        return float(np.min([epoch / warmup, 1]))

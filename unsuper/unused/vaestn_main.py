@@ -211,9 +211,9 @@ if __name__ == '__main__':
     encoder2 = Encoder(input_shape=args.input_shape, latent_dim=args.latent_dim,
                        h_size=[256, 128, 64])
     decoder1 = Decoder(output_shape=args.input_shape, latent_dim=args.latent_dim,
-                       h_size=[256, 128, 64], end_activation=torch.sigmoid)
+                       h_size=[64, 128, 256], end_activation=torch.sigmoid)
     decoder2 = Decoder(output_shape=(6,), latent_dim=args.latent_dim,
-                       h_size=[256, 128, 64], end_activation=torch.nn.LeakyReLU(0.1))
+                       h_size=[64, 128, 256], end_activation=torch.nn.LeakyReLU(0.1))
     
     stn = STN(input_shape=args.input_shape)
     model = VAE_with_STN(encoder1, encoder2, decoder1, decoder2, stn)

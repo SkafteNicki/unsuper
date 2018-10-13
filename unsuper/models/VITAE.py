@@ -45,7 +45,7 @@ class VITAE(nn.Module):
         dec = self.decoder1(z1)
         theta = self.decoder2(z2)
         out = self.stn(dec, theta)
-        return out, mu1, logvar1, mu2, logvar2
+        return out, [mu1, mu2], [logvar1, logvar2]
     
     def sample(self, n):
         device = next(self.parameters()).device
@@ -90,6 +90,5 @@ class VITAE(nn.Module):
             theta = _expm(theta.reshape(-1, 2, 3))
             return theta.reshape(-1, 6)
         
-#%%
 if __name__ == '__main__':
-    pass            
+    model = VITAE(None, None, None, None, None)          

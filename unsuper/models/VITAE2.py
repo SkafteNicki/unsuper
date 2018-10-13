@@ -20,9 +20,9 @@ def _expm(theta):
     return theta
 
 #%%
-class VAE_with_STN(nn.Module):
+class VITAE(nn.Module):
     def __init__(self, encoder1, encoder2, decoder1, decoder2, stn):
-        super(VAE_with_STN, self).__init__()
+        super(VITAE, self).__init__()
         self.encoder1 = encoder1
         self.encoder2 = encoder2
         self.decoder1 = decoder1
@@ -58,7 +58,7 @@ class VAE_with_STN(nn.Module):
         # Use inverse transformation to "detransform image"
         recon = self.stn(dec, theta)
         
-        return recon, mu1, logvar1, mu2, logvar2
+        return recon, [mu1, mu2], [logvar1, logvar2]
         
     def sample_only_images(self, n, trans):
         device = next(self.parameters()).device
