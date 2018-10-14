@@ -28,6 +28,7 @@ class VITAE(nn.Module):
         self.decoder1 = decoder1
         self.decoder2 = decoder2
         self.stn = stn
+        self.latent_dim = [encoder1.latent_dim, encoder2.latent_dim]
         
     def reparameterize(self, mu, logvar):
         if self.training:
@@ -80,7 +81,7 @@ class VITAE(nn.Module):
         mu2, logvar2 = self.encoder2(x)
         z1 = self.reparameterize(mu1, logvar1)
         z2 = self.reparameterize(mu2, logvar2)
-        return z1, z2
+        return [z1, z2]
     
     def sample_transformation(self, n):
         device = next(self.parameters()).device
@@ -89,6 +90,10 @@ class VITAE(nn.Module):
             theta = self.decoder2(z2)
             theta = _expm(theta.reshape(-1, 2, 3))
             return theta.reshape(-1, 6)
-        
+    
+    def __len__(self):
+        return 2
+    
+#%% 
 if __name__ == '__main__':
     model = VITAE(None, None, None, None, None)          

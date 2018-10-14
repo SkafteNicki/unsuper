@@ -15,6 +15,7 @@ class VAE(nn.Module):
         super(VAE, self).__init__()
         self.encoder = encoder
         self.decoder = decoder
+        self.latent_dim = [encoder.latent_dim]
         
     def reparameterize(self, mu, logvar):
         if self.training:
@@ -40,7 +41,10 @@ class VAE(nn.Module):
     def latent_representation(self, x):
         mu, logvar = self.encoder(x)
         z = self.reparameterize(mu, logvar)
-        return z
+        return [z]
+    
+    def __len__(self):
+        return 1
     
 #%%
 if __name__ == '__main__':

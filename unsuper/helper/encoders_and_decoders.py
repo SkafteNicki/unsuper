@@ -64,19 +64,49 @@ class MLP_Decoder(nn.Module):
     
 #%%
 class Conv_Encoder(nn.Module):
-    def __init__(self, ):
+    def __init__(self, input_shape, latent_dim=32):
         super(Conv_Encoder, self).__init__()
+        self.latent_dim = latent_dim
+        self.conv1 = nn.Conv2d(1, 64, kernel_size=3, stride=2, padding=1) 
+        self.conv2 = nn.Conv2d(64, 64, kernel_size=3, stride=2, padding=1) 
+        self.conv3 = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1) 
+        self.drop = nn.Dropout(0.8)        
+        self.fc1 = nn.Linear(64*7*7, latent_dim)
+        self.fc2 = nn.Linear(64*7*7, latent_dim)
+        self.activation = nn.LeakyReLU(0.1)
         
     def forward(self, x):
-        pass
-        
+        n = x.shape[0]
+        h1 = self.drop(self.activation(self.conv1(x)))
+        h2 = self.drop(self.activation(self.conv2(h1)))
+        h3 = self.drop(self.activation(self.conv3(h2)))
+        mu = self.fc1(h3.view(n, -1))
+        logvar = F.softplus(self.fc2(h3.view(n, -1)))
+        return mu, logvar
+    
 #%%
 class Conv_Decoder(nn.Module):
-    def __init__(self, ):
+    def __init__(self, output_shape, latent_dim=32, end_activation=torch.sigmoid):
         super(Conv_Decoder, self).__init__()
-        
+        self.latent_dim = latent_dim
+        self.output_shape = output_shape
+        self.drop = nn.Dropout(0.8)
+        self.fc1 = nn.Linear(latent_dim, 7*7*1)
+        self.fc2 = nn.Linear(64*25*25, 1*28*28)
+        self.conv1 = nn.ConvTranspose2d(1, 64, kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.ConvTranspose2d(64, 64, kernel_size=3, stride=2, padding=1)
+        self.conv3 = nn.ConvTranspose2d(64, 64, kernel_size=3, stride=2, padding=1)
+        self.activation = nn.LeakyReLU(0.1)
+        self.end_activation = end_activation
+    
     def forward(self, x):
-        pass
+        n = x.shape[0]
+        h1 = self.activation(self.fc1(x))
+        h2 = self.drop(self.activation(self.conv1(h1.view(-1, 1, 7, 7))))
+        h3 = self.drop(self.activation(self.conv2(h2)))
+        h4 = self.drop(self.activation(self.conv3(h3)))
+        h5 = self.end_activation(self.fc2(h4.view(n, -1)))
+        return h5.view(-1, *self.output_shape)
         
 #%%
 if __name__ == '__main__':

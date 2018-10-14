@@ -32,7 +32,7 @@ class vae_trainer:
             self.model.cuda()
         
     def train(self, trainloader, n_epochs=10, warmup=None, logdir='',
-              testloader=None):
+              testloader=None, callback=None):
         # Dir to log results
         logdir = datetime.datetime.now().strftime('%Y_%m_%d_%H_%M') if logdir is None else logdir
         if not os.path.exists(logdir): os.makedirs(logdir)
@@ -112,36 +112,39 @@ class vae_trainer:
                 recon_data_test = self.model(data_test)[0]
                 writer.add_image('test/recon', make_grid(torch.cat([data_test, 
                          recon_data_test]).cpu(), nrow=n), global_step=epoch)
-
+                
+                # If callback call it now
+                if callback:
+                    callback(writer, self.model, epoch, data_train, n)
+    
         print('Total train time', time.time() - start)
         
         # Save the embeddings
-        print('Saving embeddings')
-#        all_data = torch.zeros(len(test), *args.input_shape, dtype=torch.float32, device=device)
-#        all_latent1 = torch.zeros(len(test), args.latent_dim, dtype=torch.float32, device=device)
-#        all_latent2 = torch.zeros(len(test), args.latent_dim, dtype=torch.float32, device=device)
-#        all_label = torch.zeros(len(test), dtype=torch.int32, device=device)
-#        counter = 0
-#        for i, (data, label) in enumerate(testloader):
-#            n = data.shape[0]
-#            data = data.reshape(-1, *args.input_shape).to(device)
-#            label = label.to(device)
-#            z1, _ = encoder1(data)
-#            z2, _ = encoder2(data)
-#            all_data[counter:counter+n] = data
-#            all_latent1[counter:counter+n] = z1
-#            all_latent2[counter:counter+n] = z2
-#            all_label[counter:counter+n] = label
-#            counter += n
-#            
-#        writer.add_embedding(mat = all_latent1,
-#                             metadata = all_label,
-#                             label_img = all_data,
-#                             tag = 'latent_space1')
-#        writer.add_embedding(mat = all_latent2,
-#                             metadata = all_label,
-#                             label_img = all_data,
-#                             tag = 'latent_space2')
+        if testloader:
+            print('Saving embeddings')
+            m = len(self.model)
+            N = len(testloader.dataset)
+            all_data = torch.zeros(N, *self.input_shape, dtype=torch.float32, device=self.device)
+            all_label = torch.zeros(N, dtype=torch.int32, device=self.device)
+            all_latent = [ ]
+            for j in range(m):
+                all_latent.append(torch.zeros(N, self.model.latent_dim[j], dtype=torch.float32, device=self.device))
+            counter = 0
+            for i, (data, label) in enumerate(testloader):
+                n = data.shape[0]
+                data = data.reshape(-1, *self.input_shape).to(self.device)
+                label = label.to(self.device)
+                z = self.model.latent_representation(data)
+                all_data[counter:counter+n] = data
+                for j in range(m):
+                    all_latent[j][counter:counter+n] = z[j]
+                all_label[counter:counter+n] = label
+                counter += n
+            for j in range(m):
+                writer.add_embedding(mat = all_latent[j],
+                                     metadata = all_label,
+                                     label_img = all_data,
+                                     tag = 'latent_space' + str(j))
         
         # Close summary writer
         writer.close()
