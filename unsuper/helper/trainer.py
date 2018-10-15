@@ -76,7 +76,7 @@ class vae_trainer:
                 writer.add_scalar('train/total_loss', loss, iteration)
                 writer.add_scalar('train/recon_loss', recon_term, iteration)
                 for j, kl_loss in enumerate(kl_terms):
-                    writer.add_scalar('train/KL_loss' + str(i), kl_loss, iteration)
+                    writer.add_scalar('train/KL_loss' + str(j), kl_loss, iteration)
             
             progress_bar.set_postfix({'Average loss': train_loss / len(trainloader)})
             progress_bar.close()
@@ -106,7 +106,7 @@ class vae_trainer:
                 writer.add_scalar('test/total_loss', test_loss, iteration)
                 writer.add_scalar('test/recon_loss', recon_term, iteration)
                 for j, kl_loss in enumerate(kl_terms):
-                    writer.add_scalar('test/KL_loss' + str(i), kl_loss, iteration)
+                    writer.add_scalar('test/KL_loss' + str(j), kl_loss, iteration)
         
                 data_test = next(iter(testloader))[0].to(self.device)[:n]
                 recon_data_test = self.model(data_test)[0]

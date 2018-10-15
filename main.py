@@ -20,14 +20,14 @@ from unsuper.helper.spatial_transformer import STN_AffineDiff
 #%%
 def argparser():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model', type=str, default='vae', help='model to train')
-    parser.add_argument('--n_epochs', type=int, default=100, help='number of epochs of training')
+    parser.add_argument('--model', type=str, default='vitae', help='model to train')
+    parser.add_argument('--n_epochs', type=int, default=10, help='number of epochs of training')
     parser.add_argument('--batch_size', type=int, default=256, help='size of the batches')
     parser.add_argument('--lr', type=float, default=1e-4, help='adam: learning rate')
-    parser.add_argument('--latent_dim', type=int, default=100, help='dimensionality of the latent space')
+    parser.add_argument('--latent_dim', type=int, default=32, help='dimensionality of the latent space')
     parser.add_argument('--img_size', type=int, default=28, help='size of each image dimension')
-    parser.add_argument('--warmup', type=int, default=50, help='number of warmup epochs for kl-terms')
     parser.add_argument('--channels', type=int, default=1, help='number of image channels')
+    parser.add_argument('--warmup', type=int, default=50, help='number of warmup epochs for kl-terms')
     parser.add_argument('--classes','--list', nargs='+', default=[0,1,2,3,4,5,6,7,8,9], help='classes to train on')
     args = parser.parse_args()
     return args
@@ -87,7 +87,7 @@ if __name__ == '__main__':
         encoder2 = MLP_Encoder(input_shape=img_size, latent_dim=args.latent_dim,
                                h_size=[256, 128, 64])
         decoder2 = MLP_Decoder(output_shape=(6, ), latent_dim=args.latent_dim,
-                               h_size=[64, 128, 256])
+                               h_size=[64, 128, 256], end_activation=torch.nn.LeakyReLU(0.1))
         stn = STN_AffineDiff(input_shape=img_size)        
         if args.model == 'vitae':
             model = VITAE(encoder1, encoder2, decoder1, decoder2, stn)
