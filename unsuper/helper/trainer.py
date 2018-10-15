@@ -30,9 +30,10 @@ class vae_trainer:
         # Move model to gpu (if avaible)
         if torch.cuda.is_available():
             self.model.cuda()
-        
-    def train(self, trainloader, n_epochs=10, warmup=None, logdir='',
-              testloader=None, callback=None):
+    
+    #%%
+    def fit(self, trainloader, n_epochs=10, warmup=None, logdir='',
+            testloader=None, callback=None):
         # Dir to log results
         logdir = datetime.datetime.now().strftime('%Y_%m_%d_%H_%M') if logdir is None else logdir
         if not os.path.exists(logdir): os.makedirs(logdir)
