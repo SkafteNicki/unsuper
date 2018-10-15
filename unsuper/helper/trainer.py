@@ -11,7 +11,6 @@ from torchvision.utils import make_grid
 from tqdm import tqdm
 import time, os, datetime
 from tensorboardX import SummaryWriter
-
 from .losses import reconstruction_loss, kullback_leibler_divergence, kl_scaling
 
 #%%
@@ -81,7 +80,7 @@ class vae_trainer:
             
             progress_bar.set_postfix({'Average loss': train_loss / len(trainloader)})
             progress_bar.close()
-            
+            writer.scalar_dict
             # Log for the training set
             n = 10
             data_train = next(iter(trainloader))[0].to(self.device)[:n]
@@ -121,31 +120,43 @@ class vae_trainer:
         print('Total train time', time.time() - start)
         
         # Save the embeddings
-        if testloader:
-            print('Saving embeddings')
-            m = len(self.model)
-            N = len(testloader.dataset)
-            all_data = torch.zeros(N, *self.input_shape, dtype=torch.float32, device=self.device)
-            all_label = torch.zeros(N, dtype=torch.int32, device=self.device)
-            all_latent = [ ]
-            for j in range(m):
-                all_latent.append(torch.zeros(N, self.model.latent_dim[j], dtype=torch.float32, device=self.device))
-            counter = 0
-            for i, (data, label) in enumerate(testloader):
-                n = data.shape[0]
-                data = data.reshape(-1, *self.input_shape).to(self.device)
-                label = label.to(self.device)
-                z = self.model.latent_representation(data)
-                all_data[counter:counter+n] = data
-                for j in range(m):
-                    all_latent[j][counter:counter+n] = z[j]
-                all_label[counter:counter+n] = label
-                counter += n
-            for j in range(m):
-                writer.add_embedding(mat = all_latent[j],
-                                     metadata = all_label,
-                                     label_img = all_data,
-                                     tag = 'latent_space' + str(j))
+        print('Saving embeddings')
+        self.save_embeddings(writer, trainloader)
+        if testloader: self.save_embeddings(writer, testloader)
         
         # Close summary writer
         writer.close()
+        
+    #%%
+    def _save_embeddings(self, writer, loader):
+        m = len(self.model)
+        N = len(loader.dataset)
+        
+        # Data structures for holding the embeddings
+        all_data = torch.zeros(N, *self.input_shape, dtype=torch.float32, device=self.device)
+        all_label = torch.zeros(N, dtype=torch.int32, device=self.device)
+        all_latent = [ ]
+        for j in range(m):
+            all_latent.append(torch.zeros(N, self.model.latent_dim[j], dtype=torch.float32, device=self.device))
+        
+        # Loop over all data and get embeddings
+        counter = 0
+        for i, (data, label) in enumerate(loader):
+            n = data.shape[0]
+            data = data.reshape(-1, *self.input_shape).to(self.device)
+            label = label.to(self.device)
+            z = self.model.latent_representation(data)
+            all_data[counter:counter+n] = data
+            for j in range(m):
+                all_latent[j][counter:counter+n] = z[j]
+            all_label[counter:counter+n] = label
+            counter += n
+            
+        # Save the embeddings
+        for j in range(m):
+            writer.add_embedding(mat = all_latent[j],
+                                 metadata = all_label,
+                                 label_img = all_data,
+                                 tag = 'latent_space' + str(j))
+            
+        

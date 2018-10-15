@@ -9,8 +9,8 @@ import torch
 from .mnist_data import MNIST
 
 #%%
-def mnist_data_loader(root, train=True, transform=None, target_transform=None, 
-                 download=False, batch_size=128, classes=[0,1,2,3,4,5,6,7,8,9]):
+def mnist_data_loader(root, transform=None, target_transform=None, 
+                      download=False, batch_size=128, classes=[0,1,2,3,4,5,6,7,8,9]):
     # Load dataset
     train = MNIST(root=root, train=True, transform=transform, download=download,
                   target_transform=target_transform, classes=classes)
