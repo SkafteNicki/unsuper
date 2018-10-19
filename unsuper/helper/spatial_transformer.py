@@ -12,7 +12,7 @@ from torch.nn import functional as F
 from .expm import torch_expm
 
 #%%
-def _expm(theta):
+def expm(theta):
     n_theta = theta.shape[0]
     zero_row = torch.zeros(n_theta, 1, 3, dtype=theta.dtype, device=theta.device)
     theta = torch.cat([theta, zero_row], dim=1)
@@ -41,7 +41,7 @@ class STN_AffineDiff(nn.Module):
         
     def forward(self, x, theta):
         theta = theta.view(-1, 2, 3)
-        theta = _expm(theta)
+        theta = expm(theta)
         output_size = torch.Size([x.shape[0], *self.input_shape])
         grid = F.affine_grid(theta, output_size)
         x = F.grid_sample(x, grid)

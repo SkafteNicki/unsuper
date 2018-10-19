@@ -5,18 +5,67 @@ Created on Fri Oct 12 12:02:37 2018
 
 @author: nsde
 """
+
 #%%
 import torch
 from torch import nn
 
+from ..helper.utility import CenterCrop
+
 #%%
 class VAE(nn.Module):
-    def __init__(self, encoder, decoder):
+    def __init__(self, input_shape, latent_dim):
         super(VAE, self).__init__()
-        self.encoder = encoder
-        self.decoder = decoder
-        self.latent_dim = [encoder.latent_dim]
+        # Constants
+        self.input_shape = input_shape
+        self.latent_dim = [latent_dim]
         
+        # Define encoder and decoder
+        c,h,w = input_shape
+        self.z_dim = h//2**2 # receptive field downsampled 2 times
+        self.encoder = nn.Sequential(
+            nn.BatchNorm2d(c),
+            nn.Conv2d(c, 32, kernel_size=3, stride=2, padding=1),
+            nn.BatchNorm2d(32),
+            nn.LeakyReLU(),
+            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
+            nn.BatchNorm2d(64),
+            nn.LeakyReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(64),
+            nn.LeakyReLU(),
+        )
+        self.z_mean = nn.Linear(64 * self.z_dim**2, latent_dim)
+        self.z_var = nn.Linear(64 * self.z_dim**2, latent_dim)
+        self.z_develop = nn.Linear(latent_dim, 64 * self.z_dim**2)
+        self.decoder = nn.Sequential(
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(64),
+            nn.LeakyReLU(),
+            nn.ConvTranspose2d(64, 32, kernel_size=3, stride=2, padding=0),
+            nn.BatchNorm2d(32),
+            nn.LeakyReLU(),
+            nn.ConvTranspose2d(32, 1, kernel_size=3, stride=2, padding=1),
+            CenterCrop(h,w),
+            nn.Sigmoid()
+        )        
+    
+    #%%
+    def encode(self, x):
+        x = self.encoder(x)
+        x = x.view(x.shape[0], -1)
+        mu = self.z_mean(x)
+        logvar = self.z_var(x)
+        return mu, logvar
+    
+    #%%
+    def decode(self, z):
+        out = self.z_develop(z)
+        out = out.view(z.size(0), 64, self.z_dim, self.z_dim)
+        out = self.decoder(out)
+        return out
+    
+    #%%
     def reparameterize(self, mu, logvar):
         if self.training:
             std = torch.exp(0.5*logvar)
@@ -24,28 +73,36 @@ class VAE(nn.Module):
             return eps.mul(std).add(mu)
         else:
             return mu
-        
+    
+    #%%
     def forward(self, x):
-        mu, logvar = self.encoder(x)
+        mu, logvar = self.encode(x)
         z = self.reparameterize(mu, logvar)
-        out = self.decoder(z)
+        out = self.decode(z)
         return out, [mu], [logvar]
     
+    #%%
     def sample(self, n):
         device = next(self.parameters()).device
         with torch.no_grad():
-            z = torch.randn(n, self.encoder.latent_dim, device=device)
-            out = self.decoder(z)
+            z = torch.randn(n, self.latent_dim[0], device=device)
+            out = self.decode(z)
             return out
-       
+    
+    #%%
     def latent_representation(self, x):
-        mu, logvar = self.encoder(x)
+        mu, logvar = self.encode(x)
         z = self.reparameterize(mu, logvar)
         return [z]
     
+    #%%
     def __len__(self):
         return 1
     
+    #%%
+    def callback(self, writer, loader, epoch):
+        pass
+    
 #%%
 if __name__ == '__main__':
-    model = VAE(None, None)
+    model = VAE((1, 28, 28), 32)

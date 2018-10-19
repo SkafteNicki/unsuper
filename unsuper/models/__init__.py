@@ -9,4 +9,4 @@ Created on Tue Sep 18 12:48:18 2018
 #%%
 from .vae import VAE
 from .vitae import VITAE
-from .vitae2 import VITAE as VITAE2
+from .vitae2 import VITAE2
