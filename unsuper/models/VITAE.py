@@ -27,32 +27,50 @@ class VITAE(nn.Module):
         self.z_dim = h//2**2 # receptive field downsampled 2 times
         self.encoder1 = nn.Sequential(
             nn.BatchNorm2d(c),
-            nn.Conv2d(c, 32, kernel_size=4, stride=2, padding=1),  # 32, 16, 16
+            nn.Conv2d(c, 32, kernel_size=3, stride=2, padding=1),
             nn.BatchNorm2d(32),
             nn.LeakyReLU(),
-            nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1),  # 32, 8, 8
+            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
             nn.BatchNorm2d(64),
             nn.LeakyReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(64),
+            nn.LeakyReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(64),
+            nn.LeakyReLU()
         )
         self.z_mean1 = nn.Linear(64 * self.z_dim**2, latent_dim)
         self.z_var1 = nn.Linear(64 * self.z_dim**2, latent_dim)
         self.z_develop1 = nn.Linear(latent_dim, 64 * self.z_dim**2)
         self.decoder1 = nn.Sequential(
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(64),
+            nn.LeakyReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(64),
+            nn.LeakyReLU(),
             nn.ConvTranspose2d(64, 32, kernel_size=3, stride=2, padding=0),
             nn.BatchNorm2d(32),
-            nn.ReLU(),
+            nn.LeakyReLU(),
             nn.ConvTranspose2d(32, 1, kernel_size=3, stride=2, padding=1),
             CenterCrop(h,w),
             nn.Sigmoid()
-        )
+        )        
         self.encoder2 = nn.Sequential(
             nn.BatchNorm2d(c),
-            nn.Conv2d(c, 32, kernel_size=4, stride=2, padding=1),  # 32, 16, 16
+            nn.Conv2d(c, 32, kernel_size=3, stride=2, padding=1),
             nn.BatchNorm2d(32),
             nn.LeakyReLU(),
-            nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1),  # 32, 8, 8
+            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
             nn.BatchNorm2d(64),
             nn.LeakyReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(64),
+            nn.LeakyReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(64),
+            nn.LeakyReLU()
         )
         self.z_mean2 = nn.Linear(64 * self.z_dim**2, latent_dim)
         self.z_var2 = nn.Linear(64 * self.z_dim**2, latent_dim)

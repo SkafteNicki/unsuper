@@ -34,11 +34,17 @@ class VAE(nn.Module):
             nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(64),
             nn.LeakyReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(64),
+            nn.LeakyReLU()
         )
         self.z_mean = nn.Linear(64 * self.z_dim**2, latent_dim)
         self.z_var = nn.Linear(64 * self.z_dim**2, latent_dim)
         self.z_develop = nn.Linear(latent_dim, 64 * self.z_dim**2)
         self.decoder = nn.Sequential(
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(64),
+            nn.LeakyReLU(),
             nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(64),
             nn.LeakyReLU(),

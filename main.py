@@ -73,3 +73,6 @@ if __name__ == '__main__':
                 warmup=args.warmup, 
                 logdir=logdir,
                 testloader=testloader)
+    
+    # Save model
+    torch.save(model.state_dict(), logdir + '/trained_model.pt')
