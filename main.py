@@ -14,7 +14,7 @@ from torchvision import transforms
 from unsuper.helper.trainer import vae_trainer
 from unsuper.data.mnist_data_loader import mnist_data_loader
 from unsuper.models import VAE, VITAE, VITAE2
-from unsuper.helper.utility import count_parameters
+from unsuper.helper.utility import model_summary
 
 #%%
 def argparser():
@@ -41,8 +41,13 @@ if __name__ == '__main__':
     logdir = 'res/' + args.model + '/' + datetime.datetime.now().strftime('%Y_%m_%d_%H_%M')
     
     # Load data
+    transformations = transforms.Compose([
+            transforms.Pad(padding=7, fill=0),
+            transforms.RandomAffine(degrees=20, translate=(0.25,0.25)),
+            transforms.ToTensor(),
+    ])
     trainloader, testloader = mnist_data_loader(root='unsuper/data', 
-                                                transform=transforms.ToTensor(),
+                                                transform=transformations,
                                                 download=True,
                                                 classes=args.classes,
                                                 batch_size=args.batch_size)
@@ -58,10 +63,7 @@ if __name__ == '__main__':
         ValueError('unknown model')
     
     # Summary of model
-    print(30*"=" + " Model Summary " + 30*"=")
-    print(model)
-    print('Number of parameters:', count_parameters(model))
-    print(75*"=")
+    model_summary(model)
     
     # Optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
