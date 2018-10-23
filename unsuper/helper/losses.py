@@ -11,10 +11,14 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-def ELBO(x, recon_x, mus, logvars):
+#%%
+def ELBO(x, recon_x, mus, logvars, epoch=None, warmup=None):
+    # Calculate terms
+    weight = kl_scaling(epoch, warmup)
     NBCE = reconstruction_loss(recon_x, x)
     KLD = kullback_leibler_divergence(mus, logvars)
-    loss = NBCE + sum(KLD)
+    # Sum
+    loss = NBCE + weight*sum(KLD)
     return loss, NBCE, KLD
 
 #%%

@@ -14,9 +14,9 @@ import numpy as np
 from ..helper.utility import CenterCrop
 
 #%%
-class VAE(nn.Module):
+class VAE_Conv(nn.Module):
     def __init__(self, input_shape, latent_dim):
-        super(VAE, self).__init__()
+        super(VAE_Conv, self).__init__()
         # Constants
         self.input_shape = input_shape
         self.latent_dim = [latent_dim]

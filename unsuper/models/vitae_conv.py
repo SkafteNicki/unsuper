@@ -12,13 +12,13 @@ from torch import nn
 from torchvision.utils import make_grid
 import numpy as np
 
-from ..helper.utility import CenterCrop
+from ..helper.utility import CenterCrop, affine_decompose
 from ..helper.spatial_transformer import STN_AffineDiff, expm
 
 #%%
-class VITAE2(nn.Module):
+class VITAE_Conv(nn.Module):
     def __init__(self, input_shape, latent_dim):
-        super(VITAE2, self).__init__()
+        super(VITAE_Conv, self).__init__()
         # Constants
         self.input_shape = input_shape
         self.latent_dim = [latent_dim, latent_dim]
@@ -212,11 +212,17 @@ class VITAE2(nn.Module):
                           global_step=epoch)
     
         # Lets log a histogram of the transformation
-        theta = self.sample_transformation(1000)
+        theta = self.sample_transformation(10000)
         for i in range(6):
             writer.add_histogram('transformation/a' + str(i), theta[:,i], 
-                                 global_step=epoch)
+                                 global_step=epoch, bins='auto')
+            
+        values = affine_decompose(theta)
+        tags = ['sx', 'sy', 'm', 'theta', 'tx', 'ty']
+        for i in range(6):
+            writer.add_histogram('transformation/' + tags[i], values[i],
+                                 global_step=epoch, bins='auto')
     
 #%% 
 if __name__ == '__main__':
-    model = VITAE2((1, 28, 28), 32)          
+    model = VITAE_Conv((1, 28, 28), 32)          

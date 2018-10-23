@@ -7,6 +7,7 @@ Created on Tue Sep 18 12:56:53 2018
 """
 #%%
 import os
+import torch
 from torch import nn
 
 #%%
@@ -37,6 +38,16 @@ class CenterCrop(nn.Module):
         x1 = int(round((h - self.h) / 2.))
         y1 = int(round((w - self.w) / 2.))
         return x[:,:,x1:x1+self.h,y1:y1+self.w]
+    
+#%%
+def affine_decompose(A):
+    sx = (A[:,0,0].pow(2) + A[:,1,0].pow(2)).sqrt()
+    sy = (A[:,1,1] * A[:,0,0] - A[:,0,1] * A[:,1,0]) / sx
+    m = (A[:,0,1] * A[:,0,0] + A[:,1,0] * A[:,1,1]) / (A[:,1,1] * A[:,0,0] - A[:,0,1] * A[:,1,0])
+    theta = torch.atan2(A[:,1,0] / sx, A[:,0,0] / sx)
+    tx = A[:, 0, 2]
+    ty = A[:, 1, 2]
+    return sx, sy, m, theta, tx, ty
 
 #%%
 if __name__ == '__main__':

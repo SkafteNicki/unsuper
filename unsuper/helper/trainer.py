@@ -11,7 +11,7 @@ from torchvision.utils import make_grid
 from tqdm import tqdm
 import time, os, datetime
 from tensorboardX import SummaryWriter
-from .losses import reconstruction_loss, kullback_leibler_divergence, kl_scaling
+from .losses import ELBO
 
 #%%
 class vae_trainer:
@@ -46,7 +46,6 @@ class vae_trainer:
             progress_bar = tqdm(desc='Epoch ' + str(epoch), total=len(trainloader.dataset), 
                                 unit='samples')
             train_loss = 0
-            weight = kl_scaling(epoch, warmup)
             # Training loop
             self.model.train()
             for i, (data, _) in enumerate(trainloader):
@@ -58,9 +57,8 @@ class vae_trainer:
                 recon_data, mus, logvars = self.model(data)
                 
                 # Calculat loss
-                recon_term = reconstruction_loss(recon_data, data)
-                kl_terms = kullback_leibler_divergence(mus, logvars)
-                loss = recon_term + weight*sum(kl_terms)
+                loss, recon_term, kl_terms = ELBO(data, recon_data, mus, 
+                                                  logvars, epoch, warmup)
                 train_loss += loss.item()
                 
                 # Backpropegate and optimize
@@ -95,15 +93,15 @@ class vae_trainer:
                 with torch.no_grad():
                     # Evaluate on test set
                     self.model.eval()
-                    recon_term, kl_terms = 0, len(kl_terms)*[0]
+                    test_loss, test_recon, test_kl = 0, 0, len(kl_terms)*[0]
                     for i, (data, _) in enumerate(testloader):
                         data = data.reshape(-1, *self.input_shape).to(self.device)
                         recon_data, mus, logvars = self.model(data)    
-                        recon_term += reconstruction_loss(recon_data, data)
-                        kl_terms = [l1 + l2 for l1,l2 in 
-                                    zip(kullback_leibler_divergence(mus, logvars), kl_terms)]
-                        
-                    test_loss = recon_term + weight*sum(kl_terms)
+                        loss, recon_term, kl_terms = ELBO(data, recon_data, mus, 
+                                                          logvars, epoch, warmup)
+                        test_loss += loss.item()
+                        test_recon += recon_term.item()
+                        test_kl = [l1+l2 for l1,l2 in zip(kl_terms, test_kl)]
             
                     writer.add_scalar('test/total_loss', test_loss, iteration)
                     writer.add_scalar('test/recon_loss', recon_term, iteration)
@@ -125,6 +123,12 @@ class vae_trainer:
         with torch.no_grad():
             self._save_embeddings(writer, trainloader, name='train')
             if testloader: self._save_embeddings(writer, testloader, name='test')
+        
+        # Compute marginal log likelihood on the test set
+        if testloader:
+            logp = self.eval_log_prob(testloader, 10000)
+            print('Marginal log likelihood:', logp)
+            writer.add_text('Test marginal log likelihood',  str(logp))
         
         # Close summary writer
         writer.close()
@@ -156,9 +160,33 @@ class vae_trainer:
             
         # Save the embeddings
         for j in range(m):
-            writer.add_embedding(mat = all_latent[j],
-                                 metadata = all_label,
-                                 label_img = all_data,
-                                 tag = name + '_latent_space' + str(j))
+            # Maximum bound for the sprite image
+            if all_data.shape[0] * all_data.shape[2] * all_data.shape[3] < 8192:
+                writer.add_embedding(mat = all_latent[j],
+                                     metadata = all_label,
+                                     label_img = all_data,
+                                     tag = name + '_latent_space' + str(j))
+            else:
+                writer.add_embedding(mat = all_latent[j],
+                                     metadata = all_label,
+                                     tag = name + '_latent_space' + str(j))
+                
+    #%%
+    def eval_log_prob(self, testloader, S):
+        means = self.model.sample(S)
+        means = means.view(S, -1)
+        cov = torch.eye(means.shape[1])
+        cov = cov.repeat(S, 1, 1)
+        distribution = torch.distributions.MultivariateNormal(loc=means,
+                                                              covariance_matrix=cov)
+        total_logp = 0
+        for i, (data, _) in enumerate(testloader):
+            data_flat = data.view(S, -1)
+            logp = distribution.log_prob(data_flat)
+            total_logp += logp.mean().item()
+        total_logp /= len(testloader)
+        return total_logp
             
+        
+        
         

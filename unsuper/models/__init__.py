@@ -7,6 +7,5 @@ Created on Tue Sep 18 12:48:18 2018
 """
 
 #%%
-from .vae import VAE
-from .vitae import VITAE
-from .vitae2 import VITAE2
+from .vae_conv import VAE_Conv
+from .vitae_conv import VITAE_Conv
