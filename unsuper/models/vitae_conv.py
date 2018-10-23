@@ -212,12 +212,12 @@ class VITAE_Conv(nn.Module):
                           global_step=epoch)
     
         # Lets log a histogram of the transformation
-        theta = self.sample_transformation(10000)
+        theta = self.sample_transformation(1000)
         for i in range(6):
             writer.add_histogram('transformation/a' + str(i), theta[:,i], 
                                  global_step=epoch, bins='auto')
             
-        values = affine_decompose(theta)
+        values = affine_decompose(theta.view(-1, 2, 3))
         tags = ['sx', 'sy', 'm', 'theta', 'tx', 'ty']
         for i in range(6):
             writer.add_histogram('transformation/' + tags[i], values[i],
