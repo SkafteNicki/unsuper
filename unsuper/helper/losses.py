@@ -11,10 +11,16 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+def ELBO(x, recon_x, mus, logvars):
+    NBCE = reconstruction_loss(recon_x, x)
+    KLD = kullback_leibler_divergence(mus, logvars)
+    loss = NBCE + sum(KLD)
+    return loss, NBCE, KLD
+
 #%%
 def reconstruction_loss(recon_x, x):
-    BCE = F.binary_cross_entropy(recon_x, x, reduction='sum')
-    return BCE
+    NBCE = F.binary_cross_entropy(recon_x, x, reduction='sum')
+    return NBCE
 
 #%%
 def kullback_leibler_divergence(mus, logvars):

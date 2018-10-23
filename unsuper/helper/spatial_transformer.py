@@ -26,7 +26,7 @@ class STN_Affine(nn.Module):
         super(STN_Affine, self).__init__()
         self.input_shape = input_shape
         
-    def forward(self, x, theta):
+    def forward(self, x, theta, inverse=False):
         theta = theta.view(-1, 2, 3)
         output_size = torch.Size([x.shape[0], *self.input_shape])
         grid = F.affine_grid(theta, output_size)
@@ -39,7 +39,7 @@ class STN_AffineDiff(nn.Module):
         super(STN_AffineDiff, self).__init__()
         self.input_shape = input_shape
         
-    def forward(self, x, theta):
+    def forward(self, x, theta, inverse=False):
         theta = theta.view(-1, 2, 3)
         theta = expm(theta)
         output_size = torch.Size([x.shape[0], *self.input_shape])
@@ -47,6 +47,47 @@ class STN_AffineDiff(nn.Module):
         x = F.grid_sample(x, grid)
         return x
 
+#%%
+def batch_diagonal(input):
+    dims = [input.size(i) for i in torch.arange(input.dim())]
+    dims.append(dims[-1])
+    output = torch.zeros(dims)
+    strides = [output.stride(i) for i in torch.arange(input.dim() - 1 )]
+    strides.append(output.size(-1) + 1)
+    output.as_strided(input.size(), strides ).copy_(input)
+    return output
+
+#%%    
+class STN_AffineSpecial(nn.Module):
+    def __init__(self, input_shape):
+        super(STN_AffineSpecial, self).__init__()
+        self.input_shape = input_shape
+        
+    def forward(self, x, theta, inverse=False):
+        if inverse:
+            sx = 1.0 / theta[:,0]
+            sy = 1.0 / theta[:,1]
+            angle = -theta[:,2]
+            tx = -theta[:,3]
+            ty = -theta[:,4]
+        else:
+            sx = theta[:,0]
+            sy = theta[:,1]
+            angle = theta[:,2]
+            tx = theta[:,3]
+            ty = theta[:,4]
+
+        rot = torch.stack([torch.stack([angle.cos(), -angle.sin()], dim=1), 
+                           torch.stack([angle.sin(), angle.cos()], dim=1)], dim=1)
+        scale = batch_diagonal(torch.stack([sx, sy], dim=1))
+        trans = torch.stack([tx, ty], dim=1)
+        affine = torch.cat([rot.matmul(scale), trans[:,:,None]], dim=2)
+        
+        output_size = torch.Size([x.shape[0], *self.input_shape])
+        grid = F.affine_grid(affine, output_size)
+        x = F.grid_sample(x, grid)
+        return x
+        
 #%%
 if __name__ == '__main__':
     pass
