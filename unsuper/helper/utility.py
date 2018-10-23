@@ -19,6 +19,13 @@ def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 #%%
+def model_summary(model):
+    print(40*"=" + " Model Summary " + 40*"=")
+    print(model)
+    print('Number of parameters:', count_parameters(model))
+    print(95*"=")
+
+#%%
 class CenterCrop(nn.Module):
     def __init__(self, h, w):
         super(CenterCrop, self).__init__()

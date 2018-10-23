@@ -9,6 +9,6 @@ Created on Sat Oct 20 09:20:06 2018
 import os
 
 #%%
-os.system("python main.py --model vae")
-os.system("python main.py --model vitae")
-os.system("python main.py --model vitae2")
+os.system("python main.py --model vae --img_size=42")
+os.system("python main.py --model vitae --img_size=42")
+os.system("python main.py --model vitae2 --img_size=42")

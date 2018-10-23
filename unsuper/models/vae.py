@@ -9,6 +9,7 @@ Created on Fri Oct 12 12:02:37 2018
 #%%
 import torch
 from torch import nn
+import numpy as np
 
 from ..helper.utility import CenterCrop
 
@@ -22,7 +23,7 @@ class VAE(nn.Module):
         
         # Define encoder and decoder
         c,h,w = input_shape
-        self.z_dim = h//2**2 # receptive field downsampled 2 times
+        self.z_dim = int(np.ceil(h/2**2)) # receptive field downsampled 2 times
         self.encoder = nn.Sequential(
             nn.BatchNorm2d(c),
             nn.Conv2d(c, 32, kernel_size=3, stride=2, padding=1),
