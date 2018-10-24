@@ -59,7 +59,8 @@ class vae_trainer:
                 # Calculat loss
                 loss, recon_term, kl_terms = ELBO(data, recon_data, mus, 
                                                   logvars, epoch, warmup)                
-
+                train_loss += loss.item()
+                
                 # Backpropegate and optimize
                 loss.backward()
                 self.optimizer.step()
@@ -69,7 +70,6 @@ class vae_trainer:
                 progress_bar.set_postfix({'loss': loss.item()})
                 
                 # Save to tensorboard
-                train_loss += loss.item()
                 iteration = epoch*len(trainloader) + i
                 writer.add_scalar('train/total_loss', loss, iteration)
                 writer.add_scalar('train/recon_loss', recon_term, iteration)
@@ -126,7 +126,7 @@ class vae_trainer:
         
             # Compute marginal log likelihood on the test set
 #            if testloader:
-#                logp = self.eval_log_prob(testloader, 1000)
+#                logp = self.eval_log_prob(testloader, 100)
 #                print('Marginal log likelihood:', logp)
 #                writer.add_text('Test marginal log likelihood',  str(logp))
         
@@ -175,8 +175,7 @@ class vae_trainer:
     def eval_log_prob(self, testloader, S):
         means = self.model.sample(S)
         means = means.view(S, -1)
-        cov = torch.eye(means.shape[1])
-        cov = cov.repeat(S, 1, 1).to(self.device)
+        cov = torch.eye(means.shape[1]).to(self.device)
         distribution = torch.distributions.MultivariateNormal(loc=means,
                                                               covariance_matrix=cov)
         total_logp = 0
@@ -184,8 +183,8 @@ class vae_trainer:
         for i, (data, _) in enumerate(testloader):
             data_flat = data.view(data.size(0), -1).to(self.device)
             for data_point in data_flat:
-                total_logp += distribution.log_prob(data_flat).mean().item()
-            progress_bar.update(data.size(0))
+                total_logp += distribution.log_prob(data_point).mean().item()
+                progress_bar.update(1)
         progress_bar.close()
         total_logp /= len(testloader.dataset)
-        return total_logp        
+        return total_logp

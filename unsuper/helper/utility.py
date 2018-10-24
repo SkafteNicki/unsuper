@@ -9,6 +9,7 @@ Created on Tue Sep 18 12:56:53 2018
 import os
 import torch
 from torch import nn
+import numpy as np
 
 #%%
 def get_dir(file):
@@ -48,6 +49,11 @@ def affine_decompose(A):
     tx = A[:, 0, 2]
     ty = A[:, 1, 2]
     return sx, sy, m, theta, tx, ty
+
+#%%
+def log_p_multi_normal(x, means):
+    constant = 1.0/(2*np.pi)
+    return (means - x).norm(p=2, dim=1).mul(-0.5).exp().mul(constant)
 
 #%%
 if __name__ == '__main__':
