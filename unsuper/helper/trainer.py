@@ -15,6 +15,17 @@ from .losses import ELBO
 
 #%%
 class vae_trainer:
+    """ Main class for training the vae models 
+    Arguments:
+        input_shape: shape of a single image
+        model: model (of type torch.nn.Module) to train
+        optimizer: optimizer (of type torch.optim.Optimizer) that will be used 
+            for the training
+    Methods:
+        fit - for training the network
+        save_embeddings - embeds data into the learned spaces, saves to tensorboard
+        eval_log_prob - evaluation of the log evidence
+    """
     def __init__(self, input_shape, model, optimizer):
         self.model = model
         self.optimizer = optimizer
@@ -33,6 +44,18 @@ class vae_trainer:
     #%%
     def fit(self, trainloader, n_epochs=10, warmup=None, logdir='',
             testloader=None):
+        """ Fits the supplied model to a training set 
+        Arguments:
+            trainloader: dataloader (of type torch.utils.data.DataLoader) that
+                contains the training data
+            n_epochs: integer, number of epochs to run
+            warmup: integer, the KL terms are weighted by epoch/warmup, so this
+                number determines the number of epochs before the KL-terms are 
+                fully activated in the loss function
+            logdir: str, where to store the results
+            testloader: dataloader (of type torch.utils.data.DataLoader) that
+                contains the test data
+        """
         # Dir to log results
         logdir = datetime.datetime.now().strftime('%Y_%m_%d_%H_%M') if logdir is None else logdir
         if not os.path.exists(logdir): os.makedirs(logdir)
@@ -59,7 +82,7 @@ class vae_trainer:
                 # Calculat loss
                 loss, recon_term, kl_terms = ELBO(data, recon_data, mus, 
                                                   logvars, epoch, warmup)                
-                train_loss += loss.item()
+                train_loss += float(loss.item())
                 
                 # Backpropegate and optimize
                 loss.backward()
@@ -73,12 +96,13 @@ class vae_trainer:
                 iteration = epoch*len(trainloader) + i
                 writer.add_scalar('train/total_loss', loss, iteration)
                 writer.add_scalar('train/recon_loss', recon_term, iteration)
+                
                 for j, kl_loss in enumerate(kl_terms):
                     writer.add_scalar('train/KL_loss' + str(j), kl_loss, iteration)
             
             progress_bar.set_postfix({'Average loss': train_loss / len(trainloader)})
             progress_bar.close()
-            writer.scalar_dict
+            
             # Log for the training set
             n = 10
             data_train = next(iter(trainloader))[0].to(self.device)[:n]
@@ -121,8 +145,8 @@ class vae_trainer:
         # Save the embeddings
         print('Saving embeddings')
         with torch.no_grad():
-            self._save_embeddings(writer, trainloader, name='train')
-            if testloader: self._save_embeddings(writer, testloader, name='test')
+            self.save_embeddings(writer, trainloader, name='train')
+            if testloader: self.save_embeddings(writer, testloader, name='test')
         
             # Compute marginal log likelihood on the test set
 #            if testloader:
@@ -134,7 +158,7 @@ class vae_trainer:
         writer.close()
         
     #%%
-    def _save_embeddings(self, writer, loader, name='embedding'):
+    def save_embeddings(self, writer, loader, name='embedding'):
         m = len(self.model)
         N = len(loader.dataset)
         

@@ -18,16 +18,17 @@ from unsuper.helper.utility import model_summary
 
 #%%
 def argparser():
+    """ Argument parser for the main script """
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', type=str, default='vitae', help='model to train')
     parser.add_argument('--n_epochs', type=int, default=1, help='number of epochs of training')
     parser.add_argument('--batch_size', type=int, default=256, help='size of the batches')
     parser.add_argument('--lr', type=float, default=1e-4, help='adam: learning rate')
     parser.add_argument('--latent_dim', type=int, default=32, help='dimensionality of the latent space')
-    parser.add_argument('--img_size', type=int, default=42, help='size of each image dimension')
+    parser.add_argument('--img_size', type=int, default=28, help='size of each image dimension')
     parser.add_argument('--channels', type=int, default=1, help='number of image channels')
     parser.add_argument('--warmup', type=int, default=500, help='number of warmup epochs for kl-terms')
-    parser.add_argument('--classes','--list', nargs='+', default=[0,1,2,3,4,5,6,7,8,9], help='classes to train on')
+    parser.add_argument('--classes','--list', type=int, nargs='+', default=[0,1,2,3,4,5,6,7,8,9], help='classes to train on')
     args = parser.parse_args()
     return args
 
@@ -40,12 +41,11 @@ if __name__ == '__main__':
     # Logdir for results
     logdir = 'res/' + args.model + '/' + datetime.datetime.now().strftime('%Y_%m_%d_%H_%M')
     
-    # Load data
-    transformations = transforms.Compose([
-            transforms.Pad(padding=7, fill=0),
-            transforms.RandomAffine(degrees=20, translate=(0.25,0.25)),
-            transforms.ToTensor(),
+    transformations = transforms.Compose([ 
+            transforms.RandomAffine(degrees=20, translate=(0.1,0.1)), 
+            transforms.ToTensor(), 
     ])
+    # Load data
     trainloader, testloader = mnist_data_loader(root='unsuper/data', 
                                                 transform=transformations,
                                                 download=True,

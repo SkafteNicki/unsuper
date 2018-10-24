@@ -66,30 +66,14 @@ def _limit_case3x3(a,b,c,d,e,f,x,y):
     return E
 
 #%%
-class _zerocaseFunction(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, a,b,c,d,e,f,x,y):
-        ones = torch.ones_like(a)
-        zeros = torch.zeros_like(a)
-        Ea, Ee = ones, ones
-        Eb, Ec, Ed, Ef = zeros, zeros, zeros, zeros
-        E = torch.stack([torch.stack([Ea, Eb, Ec], dim=1),
-                         torch.stack([Ed, Ee, Ef], dim=1)], dim=1)
-        return E
-        
-    @staticmethod
-    def backward(ctx, grad):
-        n_batch = grad.shape[0]
-        return torch.tensor([[1.0,0,0], [0,0,0]]).repeat(n_batch, 1, 1).mul_(grad).sum(dim=(1,2)), \
-                torch.tensor([[0,1.0,0], [0,0,0]]).repeat(n_batch, 1, 1).mul_(grad).sum(dim=(1,2)), \
-                torch.tensor([[0,0,1.0], [0,0,0]]).repeat(n_batch, 1, 1).mul_(grad).sum(dim=(1,2)), \
-                torch.tensor([[0,0,0], [1.0,0,0]]).repeat(n_batch, 1, 1).mul_(grad).sum(dim=(1,2)), \
-                torch.tensor([[0,0,0], [0,1.0,0]]).repeat(n_batch, 1, 1).mul_(grad).sum(dim=(1,2)), \
-                torch.tensor([[0,0,0], [0,0,1.0]]).repeat(n_batch, 1, 1).mul_(grad).sum(dim=(1,2)), \
-                None, None
-
 def _zero_case3x3(a,b,c,d,e,f,x,y):
-    return _zerocaseFunction.apply(a,b,c,d,e,f,x,y)
+    ones = torch.ones_like(a)
+    zeros = torch.zeros_like(a)
+    Ea, Ee = ones, ones
+    Eb, Ec, Ed, Ef = zeros, zeros, zeros, zeros
+    E = torch.stack([torch.stack([Ea, Eb, Ec], dim=1),
+                     torch.stack([Ed, Ee, Ef], dim=1)], dim=1)
+    return E
 
 #%%
 def torch_expm3x3(A):
@@ -175,5 +159,5 @@ if __name__ == '__main__':
     expm_scipy = np.zeros_like(A)
     for i in range(n):
         expm_scipy[i] = expm(A[i].numpy())
-    expm_torch = torch_expm(A)
-    print('Difference: ', np.linalg.norm(expm_scipy - expm_torch))
+    expm_torch = torch_expm3x3(A)
+    print('Difference: ', np.linalg.norm(expm_scipy[:,:2,:] - expm_torch))

@@ -38,7 +38,8 @@ class CenterCrop(nn.Module):
         h, w = x.shape[2:]
         x1 = int(round((h - self.h) / 2.))
         y1 = int(round((w - self.w) / 2.))
-        return x[:,:,x1:x1+self.h,y1:y1+self.w]
+        out = x[:,:,x1:x1+self.h,y1:y1+self.w]
+        return out
     
 #%%
 def affine_decompose(A):
@@ -54,6 +55,16 @@ def affine_decompose(A):
 def log_p_multi_normal(x, means):
     constant = 1.0/(2*np.pi)
     return (means - x).norm(p=2, dim=1).mul(-0.5).exp().mul(constant)
+
+#%%
+def batch_diagonal(input):
+    dims = [input.size(i) for i in torch.arange(input.dim())]
+    dims.append(dims[-1])
+    output = torch.zeros(dims)
+    strides = [output.stride(i) for i in torch.arange(input.dim() - 1 )]
+    strides.append(output.size(-1) + 1)
+    output.as_strided(input.size(), strides ).copy_(input)
+    return output
 
 #%%
 if __name__ == '__main__':

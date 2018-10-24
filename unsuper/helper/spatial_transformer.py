@@ -10,15 +10,16 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from .expm import torch_expm
+from .utility import batch_diagonal
 
 #%%
-def expm(theta):
-    n_theta = theta.shape[0]
-    zero_row = torch.zeros(n_theta, 1, 3, dtype=theta.dtype, device=theta.device)
-    theta = torch.cat([theta, zero_row], dim=1)
-    theta = torch_expm(theta)
-    theta = theta[:,:2,:]
-    return theta
+def expm(theta): 
+    n_theta = theta.shape[0] 
+    zero_row = torch.zeros(n_theta, 1, 3, dtype=theta.dtype, device=theta.device) 
+    theta = torch.cat([theta, zero_row], dim=1) 
+    theta = torch_expm(theta) 
+    theta = theta[:,:2,:] 
+    return theta 
 
 #%%
 class STN_Affine(nn.Module):
@@ -46,16 +47,6 @@ class STN_AffineDiff(nn.Module):
         grid = F.affine_grid(theta, output_size)
         x = F.grid_sample(x, grid)
         return x
-
-#%%
-def batch_diagonal(input):
-    dims = [input.size(i) for i in torch.arange(input.dim())]
-    dims.append(dims[-1])
-    output = torch.zeros(dims)
-    strides = [output.stride(i) for i in torch.arange(input.dim() - 1 )]
-    strides.append(output.size(-1) + 1)
-    output.as_strided(input.size(), strides ).copy_(input)
-    return output
 
 #%%    
 class STN_AffineSpecial(nn.Module):

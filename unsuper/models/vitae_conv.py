@@ -216,7 +216,8 @@ class VITAE_Conv(nn.Module):
         for i in range(6):
             writer.add_histogram('transformation/a' + str(i), theta[:,i], 
                                  global_step=epoch, bins='auto')
-            
+        
+        # Also to a decomposition of the matrix and log these values
         values = affine_decompose(theta.view(-1, 2, 3))
         tags = ['sx', 'sy', 'm', 'theta', 'tx', 'ty']
         for i in range(6):
