@@ -57,15 +57,5 @@ def log_p_multi_normal(x, means):
     return (means - x).norm(p=2, dim=1).mul(-0.5).exp().mul(constant)
 
 #%%
-def batch_diagonal(input):
-    dims = [input.size(i) for i in torch.arange(input.dim())]
-    dims.append(dims[-1])
-    output = torch.zeros(dims)
-    strides = [output.stride(i) for i in torch.arange(input.dim() - 1 )]
-    strides.append(output.size(-1) + 1)
-    output.as_strided(input.size(), strides ).copy_(input)
-    return output
-
-#%%
 if __name__ == '__main__':
     pass

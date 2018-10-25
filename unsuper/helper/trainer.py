@@ -56,13 +56,22 @@ class vae_trainer:
             testloader: dataloader (of type torch.utils.data.DataLoader) that
                 contains the test data
         """
+        assert isinstance(trainloader, torch.utils.data.DataLoader), '''Trainloader
+            should be an instance of torch.utils.data.DataLoader '''
+        assert warmup < n_epochs, ''' Warmup period need to be smaller than the
+            number of epochs '''
+        
+        # Print stats
+        print('Number of training points: ', len(trainloader.dataset))
+        if testloader: print('Number of test points:     ', len(testloader.dataset))
+        
         # Dir to log results
         logdir = datetime.datetime.now().strftime('%Y_%m_%d_%H_%M') if logdir is None else logdir
         if not os.path.exists(logdir): os.makedirs(logdir)
         
         # Summary writer
         writer = SummaryWriter(log_dir=logdir)
-        
+        writer.export_scalars_to_json
         start = time.time()
         # Main loop
         for epoch in range(1, n_epochs+1):

@@ -9,17 +9,7 @@ Created on Fri Oct 12 12:04:43 2018
 import torch
 from torch import nn
 from torch.nn import functional as F
-from .expm import torch_expm
-from .utility import batch_diagonal
-
-#%%
-def expm(theta): 
-    n_theta = theta.shape[0] 
-    zero_row = torch.zeros(n_theta, 1, 3, dtype=theta.dtype, device=theta.device) 
-    theta = torch.cat([theta, zero_row], dim=1) 
-    theta = torch_expm(theta) 
-    theta = theta[:,:2,:] 
-    return theta 
+from .expm import torch_expm3x3 as expm
 
 #%%
 class STN_Affine(nn.Module):
@@ -45,37 +35,6 @@ class STN_AffineDiff(nn.Module):
         theta = expm(theta)
         output_size = torch.Size([x.shape[0], *self.input_shape])
         grid = F.affine_grid(theta, output_size)
-        x = F.grid_sample(x, grid)
-        return x
-
-#%%    
-class STN_AffineSpecial(nn.Module):
-    def __init__(self, input_shape):
-        super(STN_AffineSpecial, self).__init__()
-        self.input_shape = input_shape
-        
-    def forward(self, x, theta, inverse=False):
-        if inverse:
-            sx = 1.0 / theta[:,0]
-            sy = 1.0 / theta[:,1]
-            angle = -theta[:,2]
-            tx = -theta[:,3]
-            ty = -theta[:,4]
-        else:
-            sx = theta[:,0]
-            sy = theta[:,1]
-            angle = theta[:,2]
-            tx = theta[:,3]
-            ty = theta[:,4]
-
-        rot = torch.stack([torch.stack([angle.cos(), -angle.sin()], dim=1), 
-                           torch.stack([angle.sin(), angle.cos()], dim=1)], dim=1)
-        scale = batch_diagonal(torch.stack([sx, sy], dim=1))
-        trans = torch.stack([tx, ty], dim=1)
-        affine = torch.cat([rot.matmul(scale), trans[:,:,None]], dim=2)
-        
-        output_size = torch.Size([x.shape[0], *self.input_shape])
-        grid = F.affine_grid(affine, output_size)
         x = F.grid_sample(x, grid)
         return x
         

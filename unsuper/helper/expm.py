@@ -66,16 +66,6 @@ def _limit_case3x3(a,b,c,d,e,f,x,y):
     return E
 
 #%%
-def _zero_case3x3(a,b,c,d,e,f,x,y):
-    ones = torch.ones_like(a)
-    zeros = torch.zeros_like(a)
-    Ea, Ee = ones, ones
-    Eb, Ec, Ed, Ef = zeros, zeros, zeros, zeros
-    E = torch.stack([torch.stack([Ea, Eb, Ec], dim=1),
-                     torch.stack([Ed, Ee, Ef], dim=1)], dim=1)
-    return E
-
-#%%
 def torch_expm3x3(A):
     """ Tensorflow implementation for finding the matrix exponential of a batch
         of 3x3 matrices that have special form (last row is zero).
@@ -92,61 +82,12 @@ def torch_expm3x3(A):
     y = a**2 - 2*a*e + 4*b*d + e**2
     x = y.abs().sqrt()
     
-    # Calculate all 4 cases and then choose according to the input
+    # Calculate all cases and then choose according to the input
     real_res = _real_case3x3(a,b,c,d,e,f,x,y)
     complex_res = _complex_case3x3(a,b,c,d,e,f,x,y)
-    limit_res = _limit_case3x3(a,b,c,d,e,f,x,y)
-    zero_res = _zero_case3x3(a,b,c,d,e,f,x,y)
 
-    expmA = torch.where((a == -e)[:,None,None], zero_res, limit_res)
-    expmA = torch.where(y[:,None,None] < 0, complex_res, expmA)
-    expmA = torch.where(y[:,None,None] > 0, real_res, expmA)
+    expmA = torch.where(y[:,None,None] > 0, real_res, complex_res)
     return expmA
-
-#%%
-def torch_expm(A):
-    """ """
-    n_A = A.shape[0]
-    A_fro = torch.sqrt(A.abs().pow(2).sum(dim=(1,2), keepdim=True))
-    
-    # Scaling step
-    maxnorm = torch.Tensor([5.371920351148152]).type(A.dtype).to(A.device)
-    zero = torch.Tensor([0.0]).type(A.dtype).to(A.device)
-    n_squarings = torch.max(zero, torch.ceil(torch_log2(A_fro / maxnorm)))
-    Ascaled = A / 2.0**n_squarings    
-    n_squarings = n_squarings.flatten().type(torch.int32)
-    
-    # Pade 13 approximation
-    U, V = torch_pade13(Ascaled)
-    P = U + V
-    Q = -U + V
-    R, _ = torch.gesv(P, Q) # solve P = Q*R
-    
-    # Unsquaring step
-    expmA = R
-    for i in range(n_A):
-        for _ in range(n_squarings[i]):
-            expmA[i] = torch.matmul(expmA[i], expmA[i])
-    return expmA
-
-#%%
-def torch_log2(x):
-    return torch.log(x) / torch.log(torch.Tensor([2.0])).type(x.dtype).to(x.device)
-
-#%%    
-def torch_pade13(A):
-    b = torch.Tensor([64764752532480000., 32382376266240000., 7771770303897600.,
-                      1187353796428800., 129060195264000., 10559470521600.,
-                      670442572800., 33522128640., 1323241920., 40840800.,
-                      960960., 16380., 182., 1.]).type(A.dtype).to(A.device)
-        
-    ident = torch.eye(A.shape[1], dtype=A.dtype).to(A.device)
-    A2 = torch.matmul(A,A)
-    A4 = torch.matmul(A2,A2)
-    A6 = torch.matmul(A4,A2)
-    U = torch.matmul(A, torch.matmul(A6, b[13]*A6 + b[11]*A4 + b[9]*A2) + b[7]*A6 + b[5]*A4 + b[3]*A2 + b[1]*ident)
-    V = torch.matmul(A6, b[12]*A6 + b[10]*A4 + b[8]*A2) + b[6]*A6 + b[4]*A4 + b[2]*A2 + b[0]*ident
-    return U, V
 
 #%%
 if __name__ == '__main__':

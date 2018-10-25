@@ -215,14 +215,14 @@ class VITAE_Conv(nn.Module):
         theta = self.sample_transformation(1000)
         for i in range(6):
             writer.add_histogram('transformation/a' + str(i), theta[:,i], 
-                                 global_step=epoch, bins='auto')
+                                 global_step=epoch, bins='tensorflow')
         
         # Also to a decomposition of the matrix and log these values
         values = affine_decompose(theta.view(-1, 2, 3))
         tags = ['sx', 'sy', 'm', 'theta', 'tx', 'ty']
         for i in range(6):
             writer.add_histogram('transformation/' + tags[i], values[i],
-                                 global_step=epoch, bins='auto')
+                                 global_step=epoch, bins='tensorflow')
     
 #%% 
 if __name__ == '__main__':
