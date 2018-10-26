@@ -9,3 +9,4 @@ Created on Tue Sep 18 12:48:18 2018
 #%%
 from .vae_conv import VAE_Conv
 from .vitae_conv import VITAE_Conv
+from .vitae_mlp import VITAE_Mlp

@@ -48,15 +48,5 @@ class STN_AffineDiff(nn.Module):
         return x
 
 #%%
-class STN_AffineSpecial(nn.Module):
-    def __init__(self, input_shape):
-        super(STN_AffineSpecial, self).__init__()
-        self.input_shape = input_shape
-        
-    def forward(self, x, theta, inverse=False):
-        if inverse:
-            angle = 
-    
-#%%
 if __name__ == '__main__':
     pass

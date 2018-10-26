@@ -1,7 +1,6 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Fri Oct 12 12:02:37 2018
+Created on Fri Oct 26 11:05:13 2018
 
 @author: nsde
 """
@@ -16,101 +15,76 @@ from ..helper.utility import CenterCrop, affine_decompose
 from ..helper.spatial_transformer import STN_AffineDiff, expm
 
 #%%
-class VITAE_Conv(nn.Module):
+class VITAE_Mlp(nn.Module):
     def __init__(self, input_shape, latent_dim):
-        super(VITAE_Conv, self).__init__()
+        super(VITAE_Mlp, self).__init__()
         # Constants
         self.input_shape = input_shape
+        self.flat_dim = np.prod(input_shape)
         self.latent_dim = [latent_dim, latent_dim]
         
         # Define encoder and decoder
-        c,h,w = input_shape
-        self.z_dim = int(np.ceil(h/2**2)) # receptive field downsampled 2 times
         self.encoder1 = nn.Sequential(
-            nn.BatchNorm2d(c),
-            nn.Conv2d(c, 32, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm2d(32),
+            nn.BatchNorm1d(self.flat_dim),
+            nn.Linear(self.flat_dim, 512),
             nn.LeakyReLU(),
-            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm2d(64),
-            nn.LeakyReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(64),
-            nn.LeakyReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(64),
+            nn.Linear(512, 256),
             nn.LeakyReLU()
         )
-        self.z_mean1 = nn.Linear(64 * self.z_dim**2, latent_dim)
-        self.z_var1 = nn.Linear(64 * self.z_dim**2, latent_dim)
-        self.z_develop1 = nn.Linear(latent_dim, 64 * self.z_dim**2)
+        self.z_mean1 = nn.Linear(256, latent_dim)
+        self.z_var1 = nn.Linear(256, latent_dim)
         self.decoder1 = nn.Sequential(
-            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(64),
+            nn.Linear(latent_dim, 256),
             nn.LeakyReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(64),
+            nn.Linear(256, 512),
             nn.LeakyReLU(),
-            nn.ConvTranspose2d(64, 32, kernel_size=3, stride=2, padding=0),
-            nn.BatchNorm2d(32),
-            nn.LeakyReLU(),
-            nn.ConvTranspose2d(32, 1, kernel_size=3, stride=2, padding=1),
-            CenterCrop(h,w),
+            nn.Linear(512, self.flat_dim),
             nn.Sigmoid()
         )
         self.encoder2 = nn.Sequential(
-            nn.BatchNorm2d(c),
-            nn.Conv2d(c, 32, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm2d(32),
+            nn.BatchNorm1d(self.flat_dim),
+            nn.Linear(self.flat_dim, 512),
             nn.LeakyReLU(),
-            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm2d(64),
-            nn.LeakyReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(64),
-            nn.LeakyReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(64),
+            nn.Linear(512, 256),
             nn.LeakyReLU()
         )
-        self.z_mean2 = nn.Linear(64 * self.z_dim**2, latent_dim)
-        self.z_var2 = nn.Linear(64 * self.z_dim**2, latent_dim)
-        self.z_develop2 = nn.Linear(latent_dim, 64 * self.z_dim**2)
+        self.z_mean2 = nn.Linear(256, latent_dim)
+        self.z_var2 = nn.Linear(256, latent_dim)
         self.decoder2 = nn.Sequential(
-            nn.Linear(64 * self.z_dim**2, 512),
-            nn.LeakyReLU(),
-            nn.Linear(512, 6),
-            nn.LeakyReLU()
+            nn.Linear(latent_dim, 512),
+            nn.Tanh(),
+            nn.Linear(512, 6)
         )
+        # Initialize close to the identity transformation
+        for i, layer in enumerate(self.decoder2):
+            if i == 2:
+                nn.init.normal_(layer.weight, std=1e-2)
+                nn.init.zeros_(layer.bias)
+        
         self.stn = STN_AffineDiff(input_shape=input_shape)
     
     #%%
     def encode1(self, x):
-        x = self.encoder1(x)
-        x = x.view(x.shape[0], -1)
+        x = self.encoder1(x.view(x.shape[0], -1))
         mu = self.z_mean1(x)
         logvar = self.z_var1(x)
         return mu, logvar
     
     #%%
     def encode2(self, x):
-        x = self.encoder2(x)
-        x = x.view(x.shape[0], -1)
+        x = self.encoder2(x.view(x.shape[0], -1))
         mu = self.z_mean2(x)
         logvar = self.z_var2(x)
         return mu, logvar
     
     #%%
     def decode1(self, z):
-        out = self.z_develop1(z)
-        out = out.view(z.size(0), 64, self.z_dim, self.z_dim)
-        out = self.decoder1(out)
-        return out
+        out = self.decoder1(z)
+        return out.view(-1, *self.input_shape)
     
     #%%
     def decode2(self, z):
-        out = self.z_develop2(z)
-        out = self.decoder2(out)
+        out = self.decoder2(z)
         return out
     
     #%%
@@ -229,4 +203,4 @@ class VITAE_Conv(nn.Module):
     
 #%% 
 if __name__ == '__main__':
-    model = VITAE_Conv((1, 28, 28), 32)          
+    model = VITAE_Mlp((1, 28, 28), 32)

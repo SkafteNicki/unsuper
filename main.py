@@ -13,7 +13,7 @@ from torchvision import transforms
 
 from unsuper.helper.trainer import vae_trainer
 from unsuper.data.mnist_data_loader import mnist_data_loader
-from unsuper.models import VAE_Conv, VITAE_Conv
+from unsuper.models import VAE_Conv, VITAE_Conv, VITAE_Mlp
 from unsuper.helper.utility import model_summary
 
 #%%
@@ -56,8 +56,10 @@ if __name__ == '__main__':
     # Construct model
     if args.model == 'vae':
         model = VAE_Conv(input_shape=img_size, latent_dim=args.latent_dim)
-    elif args.model == 'vitae':
+    elif args.model == 'vitae_conv':
         model = VITAE_Conv(input_shape=img_size, latent_dim=args.latent_dim)
+    elif args.model == 'vitae_mlp':
+        model = VITAE_Mlp(input_shape=img_size, latent_dim=args.latent_dim)
     else:
         raise ValueError(args.model + ' is a unknown model')
     
