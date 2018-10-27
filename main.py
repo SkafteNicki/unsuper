@@ -42,8 +42,8 @@ if __name__ == '__main__':
     logdir = 'res/' + args.model + '/' + datetime.datetime.now().strftime('%Y_%m_%d_%H_%M')
     
     transformations = transforms.Compose([ 
-            transforms.Pad(padding=7, fill=0),
-            transforms.RandomAffine(degrees=20, translate=(0.1,0.1)), 
+            #transforms.Pad(padding=7, fill=0),
+            #transforms.RandomAffine(degrees=20, translate=(0.1,0.1)), 
             transforms.ToTensor(), 
     ])
     # Load data

@@ -193,17 +193,20 @@ class vae_trainer:
             
         # Save the embeddings
         for j in range(m):
+            
+            # Embeddings with dim < 3 needs to be appended extra non-informative dimensions
+            N, n = all_latent[j].shape
+            if n == 1:
+                all_latent[j] = torch.cat([all_latent[j], torch.zeros(N, 2)], dim = 1)
+            if n == 2:
+                all_latent[j] = torch.cat([all_latent[j], torch.zeros(N, 1)], dim = 1)
+            
             # Maximum bound for the sprite image
-            if all_data.shape[0] * all_data.shape[2] * all_data.shape[3] < 8192:
-                writer.add_embedding(mat = all_latent[j],
-                                     metadata = all_label,
-                                     label_img = all_data,
-                                     tag = name + '_latent_space' + str(j))
-            else:
-                writer.add_embedding(mat = all_latent[j],
-                                     metadata = all_label,
-                                     tag = name + '_latent_space' + str(j))
-                
+            writer.add_embedding(mat = all_latent[j],
+                                 metadata = all_label,
+                                 label_img = all_data,
+                                 tag = name + '_latent_space' + str(j))
+
     #%%
     def eval_log_prob(self, testloader, S):
         means = self.model.sample(S)
