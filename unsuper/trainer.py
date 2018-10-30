@@ -10,8 +10,9 @@ import torch
 from torchvision.utils import make_grid
 from tqdm import tqdm
 import time, os, datetime
+import numpy as np
 from tensorboardX import SummaryWriter
-from .losses import ELBO
+from .helper.utility import log_p_multi_normal
 
 #%%
 class vae_trainer:
@@ -75,8 +76,8 @@ class vae_trainer:
         start = time.time()
         # Main loop
         for epoch in range(1, n_epochs+1):
-            progress_bar = tqdm(desc='Epoch ' + str(epoch), total=len(trainloader.dataset), 
-                                unit='samples')
+            progress_bar = tqdm(desc='Epoch ' + str(epoch) + '/' + str(n_epochs), 
+                                total=len(trainloader.dataset), unit='samples')
             train_loss = 0
             # Training loop
             self.model.train()
@@ -89,8 +90,8 @@ class vae_trainer:
                 recon_data, mus, logvars = self.model(data)
                 
                 # Calculat loss
-                loss, recon_term, kl_terms = ELBO(data, recon_data, mus, 
-                                                  logvars, epoch, warmup)                
+                loss, recon_term, kl_terms = self.model.loss_f(
+                        data, recon_data, mus, logvars, epoch, warmup)                
                 train_loss += float(loss.item())
                 
                 # Backpropegate and optimize
@@ -130,8 +131,8 @@ class vae_trainer:
                     for i, (data, _) in enumerate(testloader):
                         data = data.reshape(-1, *self.input_shape).to(self.device)
                         recon_data, mus, logvars = self.model(data)    
-                        loss, recon_term, kl_terms = ELBO(data, recon_data, mus, 
-                                                          logvars, epoch, warmup)
+                        loss, recon_term, kl_terms = self.model.loss_f(
+                                data, recon_data, mus, logvars, epoch, warmup)
                         test_loss += loss.item()
                         test_recon += recon_term.item()
                         test_kl = [l1+l2 for l1,l2 in zip(kl_terms, test_kl)]
@@ -158,10 +159,11 @@ class vae_trainer:
             if testloader: self.save_embeddings(writer, testloader, name='test')
         
             # Compute marginal log likelihood on the test set
-#            if testloader:
-#                logp = self.eval_log_prob(testloader, 100)
-#                print('Marginal log likelihood:', logp)
-#                writer.add_text('Test marginal log likelihood',  str(logp))
+            if testloader:
+                logp = self.eval_log_prob(testloader, 10000)
+                print('Marginal log likelihood:', logp)
+                writer.add_text('Test marginal log likelihood',  str(logp),
+                                global_step=epoch)
         
         # Close summary writer
         writer.close()
@@ -209,18 +211,25 @@ class vae_trainer:
 
     #%%
     def eval_log_prob(self, testloader, S):
-        means = self.model.sample(S)
+        # Extract means in batches, so we dont run out of memory
+        means = torch.zeros(S, *self.input_shape)
+        batch_size = 256
+        n_batch = int(np.ceil(S / batch_size))
+        idx = np.arange(S)
+        for b in range(n_batch):
+            i = idx[b*batch_size:(b+1)*batch_size]
+            means[i] = self.model.sample(len(i)).cpu()
         means = means.view(S, -1)
-        cov = torch.eye(means.shape[1]).to(self.device)
-        distribution = torch.distributions.MultivariateNormal(loc=means,
-                                                              covariance_matrix=cov)
-        total_logp = 0
-        progress_bar = tqdm(desc='Calc test log(p(x))', total=len(testloader.dataset), unit='samples')
-        for i, (data, _) in enumerate(testloader):
-            data_flat = data.view(data.size(0), -1).to(self.device)
-            for data_point in data_flat:
-                total_logp += distribution.log_prob(data_point).mean().item()
-                progress_bar.update(1)
+        
+        # Loop over all points in test set and all means
+        log_p = 0
+        progress_bar = tqdm(desc='Calculating test log likelihood',
+                                total=len(testloader.dataset), unit='samples')
+        for (data, _) in testloader:
+            for x in data:
+                log_p += log_p_multi_normal(x.view(-1), means).item()
+                progress_bar.update()
         progress_bar.close()
-        total_logp /= len(testloader.dataset)
-        return total_logp
+        return log_p
+        
+        

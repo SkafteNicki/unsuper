@@ -1,7 +1,6 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Fri Oct 12 12:02:37 2018
+Created on Tue Oct 30 09:25:49 2018
 
 @author: nsde
 """
@@ -11,67 +10,47 @@ import torch
 from torch import nn
 import numpy as np
 
-from ..helper.utility import CenterCrop
 from ..helper.losses import ELBO
 
 #%%
-class VAE_Conv(nn.Module):
+class VAE_Mlp(nn.Module):
     def __init__(self, input_shape, latent_dim):
-        super(VAE_Conv, self).__init__()
+        super(VAE_Mlp, self).__init__()
         # Constants
         self.input_shape = input_shape
+        self.flat_dim = np.prod(input_shape)
         self.latent_dim = [latent_dim]
         
         # Define encoder and decoder
-        c,h,w = input_shape
-        self.z_dim = int(np.ceil(h/2**2)) # receptive field downsampled 2 times
         self.encoder = nn.Sequential(
-            nn.BatchNorm2d(c),
-            nn.Conv2d(c, 32, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm2d(32),
+            nn.BatchNorm1d(self.flat_dim),
+            nn.Linear(self.flat_dim, 512),
             nn.LeakyReLU(),
-            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm2d(64),
-            nn.LeakyReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(64),
-            nn.LeakyReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(64),
+            nn.Linear(512, 256),
             nn.LeakyReLU()
         )
-        self.z_mean = nn.Linear(64 * self.z_dim**2, latent_dim)
-        self.z_var = nn.Linear(64 * self.z_dim**2, latent_dim)
-        self.z_develop = nn.Linear(latent_dim, 64 * self.z_dim**2)
+        self.z_mean = nn.Linear(256, latent_dim)
+        self.z_var = nn.Linear(256, latent_dim)
         self.decoder = nn.Sequential(
-            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(64),
+            nn.Linear(latent_dim, 256),
             nn.LeakyReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(64),
+            nn.Linear(256, 512),
             nn.LeakyReLU(),
-            nn.ConvTranspose2d(64, 32, kernel_size=3, stride=2, padding=0),
-            nn.BatchNorm2d(32),
-            nn.LeakyReLU(),
-            nn.ConvTranspose2d(32, 1, kernel_size=3, stride=2, padding=1),
-            CenterCrop(h,w),
+            nn.Linear(512, self.flat_dim),
             nn.Sigmoid()
-        )        
+        )
     
     #%%
     def encode(self, x):
-        x = self.encoder(x)
-        x = x.view(x.shape[0], -1)
+        x = self.encoder(x.view(x.shape[0], -1))
         mu = self.z_mean(x)
         logvar = self.z_var(x)
         return mu, logvar
     
     #%%
     def decode(self, z):
-        out = self.z_develop(z)
-        out = out.view(z.size(0), 64, self.z_dim, self.z_dim)
-        out = self.decoder(out)
-        return out
+        out = self.decoder(z)
+        return out.view(-1, *self.input_shape)
     
     #%%
     def reparameterize(self, mu, logvar):
@@ -117,4 +96,6 @@ class VAE_Conv(nn.Module):
     
 #%%
 if __name__ == '__main__':
-    model = VAE_Conv((1, 28, 28), 32)
+    model = VAE_Mlp((1, 28, 28), 32)
+
+

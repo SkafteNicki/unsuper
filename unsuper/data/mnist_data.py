@@ -125,7 +125,7 @@ class MNIST(data.Dataset):
     test_file = 'test.pt'
 
     def __init__(self, root, train=True, transform=None, target_transform=None, 
-                 download=False, classes=[0,1,2,3,4,5,6,7,8,9]):
+                 download=False, classes=[0,1,2,3,4,5,6,7,8,9], num_points = 20000):
         self.root = os.path.expanduser(root)
         self.transform = transform
         self.target_transform = target_transform
@@ -153,6 +153,17 @@ class MNIST(data.Dataset):
             newtargets[i] = self.targets[idx]
         self.data = newdata
         self.targets = newtargets
+        
+        # Get only the wanted number of points
+        newdata, newtargets = [ ], [ ]
+        counter = 10 * [0]
+        for x, y in zip(self.data, self.targets):
+            if counter[y] < num_points:
+                newdata.append(x)
+                newtargets.append(y)
+                counter[y] += 1
+        self.data = torch.stack(newdata, dim=0)
+        self.targets = torch.stack(newtargets, dim=0)
         
     def __getitem__(self, index):
         """
@@ -247,4 +258,4 @@ class MNIST(data.Dataset):
 
 #%%
 if __name__ == '__main__':
-    data = MNIST(root='', train=False, download=True)
+    dataset = MNIST(root='', train=True, download=True, num_points=10, classes=[1])

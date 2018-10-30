@@ -14,6 +14,7 @@ import numpy as np
 
 from ..helper.utility import CenterCrop, affine_decompose
 from ..helper.spatial_transformer import STN_AffineDiff, expm
+from ..helper.losses import ELBO
 
 #%%
 class VITAE_Conv(nn.Module):
@@ -193,6 +194,10 @@ class VITAE_Conv(nn.Module):
             theta = self.decode2(z2)
             theta = expm(theta.reshape(-1, 2, 3))
             return theta.reshape(-1, 6)
+    
+    #%%
+    def loss_f(self, data, recon_data, mus, logvars, epoch, warmup):
+        return ELBO(data, recon_data, mus, logvars, epoch, warmup)
     
     #%%
     def __len__(self):

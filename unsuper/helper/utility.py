@@ -54,7 +54,7 @@ def affine_decompose(A):
 #%%
 def log_p_multi_normal(x, means):
     constant = 1.0/(2*np.pi)
-    return (means - x).norm(p=2, dim=1).mul(-0.5).exp().mul(constant)
+    return (means - x).norm(p=2, dim=1).mul(-0.5).exp().mul(constant).mean().log()
 
 #%%
 if __name__ == '__main__':

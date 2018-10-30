@@ -11,17 +11,19 @@ from torch import nn
 from torchvision.utils import make_grid
 import numpy as np
 
-from ..helper.utility import CenterCrop, affine_decompose
+from ..helper.utility import affine_decompose
 from ..helper.spatial_transformer import STN_AffineDiff, expm
+from ..helper.losses import ELBO
 
 #%%
 class VITAE_Mlp(nn.Module):
-    def __init__(self, input_shape, latent_dim):
+    def __init__(self, input_shape, latent_dim, mcmc_samples=1):
         super(VITAE_Mlp, self).__init__()
         # Constants
         self.input_shape = input_shape
         self.flat_dim = np.prod(input_shape)
         self.latent_dim = [latent_dim, latent_dim]
+        self.mcmc_samples = mcmc_samples
         
         # Define encoder and decoder
         self.encoder1 = nn.Sequential(
@@ -51,7 +53,9 @@ class VITAE_Mlp(nn.Module):
         self.z_mean2 = nn.Linear(256, latent_dim)
         self.z_var2 = nn.Linear(256, latent_dim)
         self.decoder2 = nn.Sequential(
-            nn.Linear(latent_dim, 512),
+            nn.Linear(latent_dim, 256),
+            nn.Tanh(),
+            nn.Linear(256, 512),
             nn.Tanh(),
             nn.Linear(512, 6)
         )
@@ -167,6 +171,12 @@ class VITAE_Mlp(nn.Module):
             theta = self.decode2(z2)
             theta = expm(theta.reshape(-1, 2, 3))
             return theta.reshape(-1, 6)
+    
+    #%%
+    def loss_f(self, data, recon_data, mus, logvars, epoch, warmup):
+        
+        
+        return ELBO(data, recon_data, mus, logvars, epoch, warmup)
     
     #%%
     def __len__(self):
