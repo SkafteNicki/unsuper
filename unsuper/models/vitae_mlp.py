@@ -101,6 +101,15 @@ class VITAE_Mlp(nn.Module):
             return mu
     
     #%%
+    def reparameterize2(self, mu, logvar):
+        if self.training:
+            std = torch.exp(0.5*logvar)
+            eps = torch.randn(self.mcmc_samples, *std.shape)
+            return eps.mul(std).add(mu).reshape(-1, std.shape[1])
+        else:
+            return mu
+    
+    #%%
     def forward(self, x):
         # Encode to transformer space
         mu2, logvar2 = self.encode2(x)
