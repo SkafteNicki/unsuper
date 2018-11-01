@@ -13,11 +13,11 @@ import numpy as np
 
 from ..helper.utility import affine_decompose
 from ..helper.spatial_transformer import STN_AffineDiff, expm
-from ..helper.losses import ELBO
+from ..helper.losses import ELBO_adjusted
 
 #%%
 class VITAE_Mlp(nn.Module):
-    def __init__(self, input_shape, latent_dim, mcmc_samples=1):
+    def __init__(self, input_shape, latent_dim, mcmc_samples=2, **kwargs):
         super(VITAE_Mlp, self).__init__()
         # Constants
         self.input_shape = input_shape
@@ -104,32 +104,32 @@ class VITAE_Mlp(nn.Module):
     def reparameterize2(self, mu, logvar):
         if self.training:
             std = torch.exp(0.5*logvar)
-            eps = torch.randn(self.mcmc_samples, *std.shape)
+            eps = torch.randn(self.mcmc_samples, *std.shape, device=std.device)
             return eps.mul(std).add(mu).reshape(-1, std.shape[1])
         else:
-            return mu
+            return mu.repeat(self.mcmc_samples, 1)
     
     #%%
     def forward(self, x):
         # Encode to transformer space
         mu2, logvar2 = self.encode2(x)
-        z2 = self.reparameterize(mu2, logvar2)
+        z2 = self.reparameterize2(mu2, logvar2)
 
         # Decode transformation
         theta = self.decode2(z2)
         
         # Call STN with inverse transformation
-        x_new = self.stn(x, -theta)
+        x_new = self.stn(x.repeat(self.mcmc_samples, 1, 1, 1), -theta)
         
         # Encode image
         mu1, logvar1 = self.encode1(x_new)
-        z1 = self.reparameterize(mu1, logvar1)
+        z1 = self.reparameterize(mu1[:x.shape[0]], logvar1[:x.shape[0]])
         
         # Decode image
         dec = self.decode1(z1)
         
         # Use inverse transformation to "detransform image"
-        recon = self.stn(dec, theta)
+        recon = self.stn(dec, theta[:x.shape[0]])
         
         return recon, [mu1, mu2], [logvar1, logvar2]
 
@@ -183,9 +183,7 @@ class VITAE_Mlp(nn.Module):
     
     #%%
     def loss_f(self, data, recon_data, mus, logvars, epoch, warmup):
-        
-        
-        return ELBO(data, recon_data, mus, logvars, epoch, warmup)
+        return ELBO_adjusted(data, recon_data, mus, logvars, self.mcmc_samples, epoch, warmup)
     
     #%%
     def __len__(self):

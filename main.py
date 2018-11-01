@@ -30,13 +30,18 @@ def argparser():
     parser.add_argument('--warmup', type=int, default=1, help='number of warmup epochs for kl-terms')
     parser.add_argument('--classes','--list', type=int, nargs='+', default=[0,1,2,3,4,5,6,7,8,9], help='classes to train on')
     parser.add_argument('--num_points', type=int, default=10000, help='number of points in each class')
-    args = parser.parse_args()
-    return args
+    args, unknown = parser.parse_known_args()
+    
+    # Make the unknown parameters into dict
+    unpack = dict()
+    for i in range(0,len(unknown),2):
+        unpack[unknown[i][2:]] = int(unknown[i+1])
+    return args, unpack
 
 #%%
 if __name__ == '__main__':
     # Input arguments
-    args = argparser()
+    args, additional_args = argparser()
     img_size = (args.channels, args.img_size, args.img_size)
     
     # Logdir for results
@@ -56,7 +61,8 @@ if __name__ == '__main__':
                                                 batch_size=args.batch_size)
     
     # Construct model
-    model = get_model(args.model)(input_shape=img_size, latent_dim=args.latent_dim)
+    model_class = get_model(args.model)
+    model = model_class(input_shape=img_size, latent_dim=args.latent_dim, **additional_args)
     
     # Summary of model
     model_summary(model)

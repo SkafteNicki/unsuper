@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Fri Oct 12 12:02:37 2018
+Created on Wed Oct 31 11:12:35 2018
 
 @author: nsde
 """
@@ -14,16 +14,15 @@ import numpy as np
 
 from ..helper.utility import CenterCrop, affine_decompose
 from ..helper.spatial_transformer import STN_AffineDiff, expm
-from ..helper.losses import ELBO_adjusted
+from ..helper.losses import ELBO
 
 #%%
-class VITAE_Conv(nn.Module):
-    def __init__(self, input_shape, latent_dim, mcmc_samples=2, **kwargs):
-        super(VITAE_Conv, self).__init__()
+class VITAE2_Conv(nn.Module):
+    def __init__(self, input_shape, latent_dim, **kwargs):
+        super(VITAE2_Conv, self).__init__()
         # Constants
         self.input_shape = input_shape
         self.latent_dim = [latent_dim, latent_dim]
-        self.mcmc_samples = mcmc_samples
         
         # Define encoder and decoder
         c,h,w = input_shape
@@ -123,40 +122,18 @@ class VITAE_Conv(nn.Module):
             return eps.mul(std).add(mu)
         else:
             return mu
-        
-    #%%
-    def reparameterize2(self, mu, logvar):
-        if self.training:
-            std = torch.exp(0.5*logvar)
-            eps = torch.randn(self.mcmc_samples, *std.shape, device=std.device)
-            return eps.mul(std).add(mu).reshape(-1, std.shape[1])
-        else:
-            return mu.repeat(self.mcmc_samples, 1)
     
     #%%
-    def forward(self, x):
-        # Encode to transformer space
-        mu2, logvar2 = self.encode2(x)
-        z2 = self.reparameterize2(mu2, logvar2)
+    def forward(self, x): 
+        mu1, logvar1 = self.encode1(x) 
+        mu2, logvar2 = self.encode2(x) 
+        z1 = self.reparameterize(mu1, logvar1) 
+        z2 = self.reparameterize(mu2, logvar2) 
+        dec = self.decode1(z1) 
+        theta = self.decode2(z2) 
+        out = self.stn(dec, theta) 
+        return out, [mu1, mu2], [logvar1, logvar2] 
 
-        # Decode transformation
-        theta = self.decode2(z2)
-        
-        # Call STN with inverse transformation
-        x_new = self.stn(x.repeat(self.mcmc_samples, 1, 1, 1), -theta)
-        
-        # Encode image
-        mu1, logvar1 = self.encode1(x_new)
-        z1 = self.reparameterize(mu1[:x.shape[0]], logvar1[:x.shape[0]])
-        
-        # Decode image
-        dec = self.decode1(z1)
-        
-        # Use inverse transformation to "detransform image"
-        recon = self.stn(dec, theta[:x.shape[0]])
-        
-        return recon, [mu1, mu2], [logvar1, logvar2]
-    
     #%%
     def sample(self, n):
         device = next(self.parameters()).device
@@ -207,7 +184,7 @@ class VITAE_Conv(nn.Module):
     
     #%%
     def loss_f(self, data, recon_data, mus, logvars, epoch, warmup):
-        return ELBO_adjusted(data, recon_data, mus, logvars, self.mcmc_samples, epoch, warmup)
+        return ELBO(data, recon_data, mus, logvars, epoch, warmup)
     
     #%%
     def __len__(self):
@@ -244,4 +221,4 @@ class VITAE_Conv(nn.Module):
     
 #%% 
 if __name__ == '__main__':
-    model = VITAE_Conv((1, 28, 28), 32)          
+    model = VITAE2_Conv((1, 28, 28), 32)          

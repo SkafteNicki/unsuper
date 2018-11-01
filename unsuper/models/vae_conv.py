@@ -16,7 +16,7 @@ from ..helper.losses import ELBO
 
 #%%
 class VAE_Conv(nn.Module):
-    def __init__(self, input_shape, latent_dim):
+    def __init__(self, input_shape, latent_dim, **kwargs):
         super(VAE_Conv, self).__init__()
         # Constants
         self.input_shape = input_shape
