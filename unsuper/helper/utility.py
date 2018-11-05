@@ -53,8 +53,15 @@ def affine_decompose(A):
 
 #%%
 def log_p_multi_normal(x, means):
-    constant = 1.0/(2*np.pi)
-    return (means - x).norm(p=2, dim=1).mul(-0.5).exp().mul(constant).mean().log()
+    d = x.shape[1]
+    constant = 1.0/np.sqrt((2*np.pi)**d)
+    exponentials = (means - x).norm(p=2, dim=1).mul(-0.5).exp()
+    return exponentials.mul(constant).mean().log()
+
+#%%
+def log_normal2(x, mean, log_var, eps=0.0):
+    c = - 0.5 * torch.log(2*np.pi)
+    return c - log_var/2 - (x - mean)**2 / (2 * torch.exp(log_var) + eps)
 
 #%%
 if __name__ == '__main__':

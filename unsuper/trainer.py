@@ -211,7 +211,6 @@ class vae_trainer:
 
     #%%
     def eval_log_prob(self, testloader, S):
-        # Extract means in batches, so we dont run out of memory
         means = torch.zeros(S, *self.input_shape)
         batch_size = 256
         n_batch = int(np.ceil(S / batch_size))
@@ -222,14 +221,19 @@ class vae_trainer:
         means = means.view(S, -1)
         
         # Loop over all points in test set and all means
-        log_p = 0
+        log_p = [ ]
         progress_bar = tqdm(desc='Calculating test log likelihood',
-                                total=len(testloader.dataset), unit='samples')
+                            total=len(testloader.dataset), unit='samples')
         for (data, _) in testloader:
             for x in data:
-                log_p += log_p_multi_normal(x.view(-1), means).item()
+                x = x.view(1,-1).repeat(S,1)
+                probs = (x * means.log() + (1-x) * (1-means).log()).sum(dim=1).exp()
+                log_p.append(probs.mean())
                 progress_bar.update()
+        log_p = sum([-p.log().item() for p in log_p if p != 0])
+        log_p /= len(testloader.dataset)
         progress_bar.close()
         return log_p
+                
         
         

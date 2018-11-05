@@ -10,6 +10,7 @@ Created on Fri Oct 12 12:02:37 2018
 import torch
 from torch import nn
 import numpy as np
+from torchvision.utils import make_grid
 
 from ..helper.utility import CenterCrop
 from ..helper.losses import ELBO
@@ -113,7 +114,16 @@ class VAE_Conv(nn.Module):
     
     #%%
     def callback(self, writer, loader, epoch):
-        pass
+        # If 2d latent space we can make a fine meshgrid of sampled points
+        if self.latent_dim[0] == 2:
+            device = next(self.parameters()).device
+            x = np.linspace(-3, 3, 20)
+            y = np.linspace(-3, 3, 20)
+            z = np.stack([array.flatten() for array in np.meshgrid(x,y)], axis=1)
+            z = torch.tensor(z, dtype=torch.float32)
+            out = self.decode(z.to(device))
+            writer.add_image('samples/meshgrid', make_grid(out.cpu(), nrow=20),
+                             global_step=epoch)
     
 #%%
 if __name__ == '__main__':

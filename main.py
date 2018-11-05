@@ -20,8 +20,8 @@ from unsuper.helper.utility import model_summary
 def argparser():
     """ Argument parser for the main script """
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model', type=str, default='vitae', help='model to train')
-    parser.add_argument('--n_epochs', type=int, default=10, help='number of epochs of training')
+    parser.add_argument('--model', type=str, default='vae_mlp', help='model to train')
+    parser.add_argument('--n_epochs', type=int, default=3, help='number of epochs of training')
     parser.add_argument('--batch_size', type=int, default=256, help='size of the batches')
     parser.add_argument('--lr', type=float, default=1e-4, help='adam: learning rate')
     parser.add_argument('--latent_dim', type=int, default=32, help='dimensionality of the latent space')
@@ -35,7 +35,10 @@ def argparser():
     # Make the unknown parameters into dict
     unpack = dict()
     for i in range(0,len(unknown),2):
-        unpack[unknown[i][2:]] = int(unknown[i+1])
+        if unknown[i+1].isdigit():
+            unpack[unknown[i][2:]] = int(unknown[i+1])
+        else:
+            unpack[unknown[i][2:]] = unknown[i+1]
     return args, unpack
 
 #%%
@@ -45,14 +48,17 @@ if __name__ == '__main__':
     img_size = (args.channels, args.img_size, args.img_size)
     
     # Logdir for results
-    logdir = 'res/' + args.model + '/' + datetime.datetime.now().strftime('%Y_%m_%d_%H_%M')
+    if 'logdir' in additional_args:
+        logdir = 'res/' + args.model + '/' + additional_args['logdir']
+    else:
+        logdir = 'res/' + args.model + '/' + datetime.datetime.now().strftime('%Y_%m_%d_%H_%M')
     
+    # Load data
     transformations = transforms.Compose([ 
             #transforms.Pad(padding=7, fill=0),
-            transforms.RandomAffine(degrees=20, translate=(0.1,0.1)), 
+            #transforms.RandomAffine(degrees=20, translate=(0.1,0.1)), 
             transforms.ToTensor(), 
     ])
-    # Load data
     trainloader, testloader = mnist_data_loader(root='unsuper/data', 
                                                 transform=transformations,
                                                 download=True,

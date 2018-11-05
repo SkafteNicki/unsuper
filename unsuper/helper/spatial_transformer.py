@@ -10,6 +10,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from .expm import torch_expm
+from libcpab.pytorch import cpab
 
 #%%
 def expm(theta): 
@@ -46,6 +47,19 @@ class STN_AffineDiff(nn.Module):
         grid = F.affine_grid(theta, output_size)
         x = F.grid_sample(x, grid)
         return x
+
+#%%
+class STN_CPAB(nn.Module):
+    def __init__(self, input_shape):
+        super(STN_CPAB, self).__init__()
+        self.input_shape = input_shape
+        self.cpab = cpab([4,4], zero_boundary=True, 
+                         volume_perservation=False,
+                         device='cuda')
+    
+    def forward(self, x, theta, inverse=False):
+        out = cpab.transform_data(x, theta)
+        return out
 
 #%%
 if __name__ == '__main__':

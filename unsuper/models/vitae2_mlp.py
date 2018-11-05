@@ -205,6 +205,19 @@ class VITAE2_Mlp(nn.Module):
                                  global_step=epoch, bins='auto')
             writer.add_scalar('transformation/mean_' + tags[i], values[i].mean(),
                               global_step=epoch)
+            
+        # If 2d latent space we can make a fine meshgrid of sampled points
+        if self.latent_dim[0] == 2:
+            device = next(self.parameters()).device
+            x = np.linspace(-3, 3, 20)
+            y = np.linspace(-3, 3, 20)
+            z = np.stack([array.flatten() for array in np.meshgrid(x,y)], axis=1)
+            z = torch.tensor(z, dtype=torch.float32)
+            trans = torch.tensor([0,0,0,0,0,0], dtype=torch.float32).repeat(20*20, 1, 1)
+            dec = self.decode1(z.to(device))
+            out = self.stn(dec, trans.to(device))
+            writer.add_image('samples/meshgrid', make_grid(out.cpu(), nrow=20),
+                             global_step=epoch)
     
 #%% 
 if __name__ == '__main__':
