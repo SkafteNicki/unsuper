@@ -88,15 +88,23 @@ class VITAE_CI(nn.Module):
     
     #%%
     def forward(self, x, eq_samples=1, iw_samples=1):
+        # Encode/decode transformer space
         mu1, logvar1 = self.encode1(x)
         z1 = self.reparameterize(mu1, logvar1, eq_samples, iw_samples)
         theta_mean, theta_var = self.decode1(z1)
+        
+        # Transform input
         x_new = self.stn(x.repeat(eq_samples*iw_samples, 1, 1, 1), -theta_mean)
+        
+        # Encode/decode semantic space
         mu2, logvar2 = self.encode2(x_new)
         z2 = self.reparameterize(mu2, logvar2, 1, 1)
         x_mean, x_var = self.decode2(z2)
+        
+        # "Detransform" output
         x_mean = self.stn(x_mean, theta_mean)
         x_var = self.stn(x_var, theta_mean)
+        
         return x_mean, x_var, [z1, z2], [mu1, mu2], [logvar1, logvar2]
 
     #%%

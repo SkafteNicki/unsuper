@@ -86,6 +86,8 @@ if __name__ == '__main__':
                 warmup=args.warmup, 
                 logdir=logdir,
                 testloader=testloader,
+                eq_samples=args.eq_samples, 
+                iw_samples=args.iw_samples, 
                 eval_epoch=args.eval_epoch)
     
     # Save model

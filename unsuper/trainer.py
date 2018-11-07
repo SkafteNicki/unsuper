@@ -24,7 +24,6 @@ class vae_trainer:
     Methods:
         fit - for training the network
         save_embeddings - embeds data into the learned spaces, saves to tensorboard
-        eval_log_prob - evaluation of the log evidence
     """
     def __init__(self, input_shape, model, optimizer):
         self.model = model
@@ -56,6 +55,11 @@ class vae_trainer:
             logdir: str, where to store the results
             testloader: dataloader (of type torch.utils.data.DataLoader) that
                 contains the test data
+            eq_samples: integer, number of equality samples which the expectation
+                is calculated over
+            iw_samples: integer, number of samples the mean-log is calculated over
+            eval_epoch: how many epochs that should pass between calculating the
+                L5000 loglikelihood (very expensive to do)
         """
         # Assert that input is okay
         assert isinstance(trainloader, torch.utils.data.DataLoader), '''Trainloader
