@@ -10,7 +10,6 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from .expm import torch_expm
-from libcpab.pytorch import cpab
 
 #%%
 def expm(theta): 
@@ -22,9 +21,9 @@ def expm(theta):
     return theta 
 
 #%%
-class STN_Affine(nn.Module):
+class ST_Affine(nn.Module):
     def __init__(self, input_shape):
-        super(STN_Affine, self).__init__()
+        super(ST_Affine, self).__init__()
         self.input_shape = input_shape
         
     def forward(self, x, theta, inverse=False):
@@ -34,10 +33,13 @@ class STN_Affine(nn.Module):
         x = F.grid_sample(x, grid)
         return x
     
+    def dim(self):
+        return 6
+    
 #%%
-class STN_AffineDiff(nn.Module):
+class ST_AffineDiff(nn.Module):
     def __init__(self, input_shape):
-        super(STN_AffineDiff, self).__init__()
+        super(ST_AffineDiff, self).__init__()
         self.input_shape = input_shape
         
     def forward(self, x, theta, inverse=False):
@@ -47,19 +49,30 @@ class STN_AffineDiff(nn.Module):
         grid = F.affine_grid(theta, output_size)
         x = F.grid_sample(x, grid)
         return x
+    
+    def dim(self):
+        return 6
 
 #%%
-class STN_CPAB(nn.Module):
-    def __init__(self, input_shape):
-        super(STN_CPAB, self).__init__()
-        self.input_shape = input_shape
-        self.cpab = cpab([4,4], zero_boundary=True, 
-                         volume_perservation=False,
-                         device='cuda')
-    
-    def forward(self, x, theta, inverse=False):
-        out = cpab.transform_data(x, theta)
-        return out
+try:
+    from libcpab.pytorch import cpab
+
+    class ST_CPAB(nn.Module):
+        def __init__(self, input_shape):
+            super(ST_CPAB, self).__init__()
+            self.input_shape = input_shape
+            self.cpab = cpab([4,4], zero_boundary=True, 
+                             volume_perservation=False,
+                             device='cuda')
+        
+        def forward(self, x, theta, inverse=False):
+            out = cpab.transform_data(x, theta)
+            return out
+        
+        def dim(self):
+            return self.cpab.get_theta_dim()
+except:
+    pass
 
 #%%
 if __name__ == '__main__':

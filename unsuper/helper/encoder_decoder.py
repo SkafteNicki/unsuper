@@ -12,6 +12,24 @@ import numpy as np
 from ..helper.utility import CenterCrop
 
 #%%
+def get_encoder(encoder_name):
+    models = {'mlp': mlp_encoder,
+              'conv': conv_encoder,
+              }
+    assert (encoder_name in models), 'Encoder not found, choose between: ' \
+            + ', '.join([k for k in models.keys()])
+    return models[encoder_name]
+
+#%%
+def get_decoder(decoder_name):
+    models = {'mlp': mlp_decoder,
+              'conv': conv_decoder,
+              }
+    assert (decoder_name in models), 'Decoder not found, choose between: ' \
+            + ', '.join([k for k in models.keys()])
+    return models[decoder_name]
+
+#%%
 class mlp_encoder(nn.Module):
     def __init__(self, input_shape, latent_dim):
         super(mlp_encoder, self).__init__()
@@ -26,7 +44,7 @@ class mlp_encoder(nn.Module):
         self.encoder_dim = 256
         
     def forward(self, x):
-        return self.encoder(x)
+        return self.encoder(x.view(x.shape[0], -1))
 
 #%%
 class mlp_decoder(nn.Module):

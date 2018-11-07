@@ -10,9 +10,8 @@ import torch
 from torchvision.utils import make_grid
 from tqdm import tqdm
 import time, os, datetime
-import numpy as np
 from tensorboardX import SummaryWriter
-from .helper.utility import log_p_multi_normal
+from .helper.losses import vae_loss
 
 #%%
 class vae_trainer:
@@ -31,6 +30,7 @@ class vae_trainer:
         self.model = model
         self.optimizer = optimizer
         self.input_shape = input_shape
+        self.outputdensity = model.outputdensity
         
         # Get the device
         if torch.cuda.is_available():
@@ -44,7 +44,7 @@ class vae_trainer:
     
     #%%
     def fit(self, trainloader, n_epochs=10, warmup=None, logdir='',
-            testloader=None):
+            testloader=None, eq_samples=1, iw_samples=1, eval_epoch=10000):
         """ Fits the supplied model to a training set 
         Arguments:
             trainloader: dataloader (of type torch.utils.data.DataLoader) that
@@ -57,9 +57,10 @@ class vae_trainer:
             testloader: dataloader (of type torch.utils.data.DataLoader) that
                 contains the test data
         """
+        # Assert that input is okay
         assert isinstance(trainloader, torch.utils.data.DataLoader), '''Trainloader
             should be an instance of torch.utils.data.DataLoader '''
-        assert warmup < n_epochs, ''' Warmup period need to be smaller than the
+        assert warmup <= n_epochs, ''' Warmup period need to be smaller than the
             number of epochs '''
         
         # Print stats
@@ -72,9 +73,9 @@ class vae_trainer:
         
         # Summary writer
         writer = SummaryWriter(log_dir=logdir)
-        writer.export_scalars_to_json
-        start = time.time()
+        
         # Main loop
+        start = time.time()
         for epoch in range(1, n_epochs+1):
             progress_bar = tqdm(desc='Epoch ' + str(epoch) + '/' + str(n_epochs), 
                                 total=len(trainloader.dataset), unit='samples')
@@ -87,15 +88,20 @@ class vae_trainer:
             
                 # Feed forward data
                 data = data.reshape(-1, *self.input_shape).to(self.device)
-                recon_data, mus, logvars = self.model(data)
+                out = self.model(data, eq_samples, iw_samples)
                 
                 # Calculat loss
-                loss, recon_term, kl_terms = self.model.loss_f(
-                        data, recon_data, mus, logvars, epoch, warmup)                
+                loss, recon_term, kl_terms = vae_loss(data, *out, 
+                                                      eq_samples, iw_samples, 
+                                                      self.model.latent_dim, 
+                                                      epoch, warmup, 
+                                                      self.outputdensity)
                 train_loss += float(loss.item())
                 
                 # Backpropegate and optimize
-                loss.backward()
+                # We need to maximize the bound, so in this case we need to
+                # minimize the negative bound
+                (-loss).backward()
                 self.optimizer.step()
                 
                 # Write to consol
@@ -125,14 +131,16 @@ class vae_trainer:
             
             if testloader:
                 with torch.no_grad():
-                    # Evaluate on test set
+                    # Evaluate on test set (L1 log like)
                     self.model.eval()
                     test_loss, test_recon, test_kl = 0, 0, len(kl_terms)*[0]
                     for i, (data, _) in enumerate(testloader):
                         data = data.reshape(-1, *self.input_shape).to(self.device)
-                        recon_data, mus, logvars = self.model(data)    
-                        loss, recon_term, kl_terms = self.model.loss_f(
-                                data, recon_data, mus, logvars, epoch, warmup)
+                        out = self.model(data, 1, 1)    
+                        loss, recon_term, kl_terms = vae_loss(data, *out, 1, 1, 
+                                                              self.model.latent_dim, 
+                                                              epoch, warmup, 
+                                                              self.outputdensity)
                         test_loss += loss.item()
                         test_recon += recon_term.item()
                         test_kl = [l1+l2 for l1,l2 in zip(kl_terms, test_kl)]
@@ -147,9 +155,30 @@ class vae_trainer:
                     writer.add_image('test/recon', make_grid(torch.cat([data_test, 
                              recon_data_test]).cpu(), nrow=n), global_step=epoch)
                     
-                    # If callback call it now
+                    # Callback, if a model have something special to log
                     self.model.callback(writer, testloader, epoch)
-    
+                    
+                    # If testset and we are at a eval epoch (or last epoch), 
+                    # calculate L5000 (very expensive to do)
+                    if (epoch % eval_epoch == 0) or (epoch==n_epochs):
+                        progress_bar = tqdm(desc='Calculating log(p(x))', 
+                                            total=len(testloader.dataset), unit='samples')
+                        test_loss, test_recon, test_kl = 0, 0, len(kl_terms)*[0]
+                        for i, (data, _) in enumerate(testloader):
+                            data = data.reshape(-1, *self.input_shape).to(self.device)
+                            # We need to do this for each individual points, because
+                            # iw_samples is high (running out of GPU memory)
+                            for d in data:
+                                out = self.model(d[None], 1, 5000)
+                                loss, _, _ = vae_loss(d, *out, 1, 5000,
+                                                      self.model.latent_dim, 
+                                                      epoch, warmup, 
+                                                      self.outputdensity)
+                                test_loss += loss.item()
+                                progress_bar.update()
+                        progress_bar.close()
+                        writer.add_scalar('test/L5000', test_loss, iteration)
+                        
         print('Total train time', time.time() - start)
         
         # Save the embeddings
@@ -158,27 +187,21 @@ class vae_trainer:
             self.save_embeddings(writer, trainloader, name='train')
             if testloader: self.save_embeddings(writer, testloader, name='test')
         
-            # Compute marginal log likelihood on the test set
-            if testloader:
-                logp = self.eval_log_prob(testloader, 10000)
-                print('Marginal log likelihood:', logp)
-                writer.add_text('Test marginal log likelihood',  str(logp),
-                                global_step=epoch)
-        
         # Close summary writer
         writer.close()
         
     #%%
     def save_embeddings(self, writer, loader, name='embedding'):
-        m = len(self.model)
+        # Constants
         N = len(loader.dataset)
+        m = self.model.latent_spaces
         
         # Data structures for holding the embeddings
         all_data = torch.zeros(N, *self.input_shape, dtype=torch.float32)
         all_label = torch.zeros(N, dtype=torch.int32)
         all_latent = [ ]
         for j in range(m):
-            all_latent.append(torch.zeros(N, self.model.latent_dim[j], dtype=torch.float32))
+            all_latent.append(torch.zeros(N, self.model.latent_dim, dtype=torch.float32))
         
         # Loop over all data and get embeddings
         counter = 0
@@ -208,32 +231,5 @@ class vae_trainer:
                                  metadata = all_label,
                                  label_img = all_data,
                                  tag = name + '_latent_space' + str(j))
-
-    #%%
-    def eval_log_prob(self, testloader, S):
-        means = torch.zeros(S, *self.input_shape)
-        batch_size = 256
-        n_batch = int(np.ceil(S / batch_size))
-        idx = np.arange(S)
-        for b in range(n_batch):
-            i = idx[b*batch_size:(b+1)*batch_size]
-            means[i] = self.model.sample(len(i)).cpu()
-        means = means.view(S, -1)
-        
-        # Loop over all points in test set and all means
-        log_p = [ ]
-        progress_bar = tqdm(desc='Calculating test log likelihood',
-                            total=len(testloader.dataset), unit='samples')
-        for (data, _) in testloader:
-            for x in data:
-                x = x.view(1,-1).repeat(S,1)
-                probs = (x * means.log() + (1-x) * (1-means).log()).sum(dim=1).exp()
-                log_p.append(probs.mean())
-                progress_bar.update()
-        log_p = sum([-p.log().item() for p in log_p if p != 0])
-        log_p /= len(testloader.dataset)
-        progress_bar.close()
-        return log_p
-                
         
         

@@ -13,10 +13,6 @@ from torch.nn.functional import softplus
 import numpy as np
 from torchvision.utils import make_grid
 
-from ..helper.utility import log_normal2
-
-from ..helper.losses import ELBO
-
 #%%
 class VAE(nn.Module):
     def __init__(self, input_shape, latent_dim, encoder, decoder, outputdensity):
@@ -25,28 +21,30 @@ class VAE(nn.Module):
         self.input_shape = input_shape
         self.flat_dim = np.prod(input_shape)
         self.latent_dim = latent_dim
+        self.latent_spaces = 1
+        self.outputdensity = outputdensity
         
         # Define encoder and decoder
-        self.encoder = encoder(latent_dim)
+        self.encoder = encoder(input_shape, latent_dim)
         self.z_mean = nn.Linear(self.encoder.encoder_dim, self.latent_dim)
         self.z_var = nn.Linear(self.encoder.encoder_dim, self.latent_dim)
-        self.decoder = decoder(latent_dim)
+        self.decoder = decoder(input_shape, latent_dim)
         self.x_mean = nn.Linear(self.decoder.decoder_dim, self.flat_dim)
         self.x_var = nn.Linear(self.decoder.decoder_dim, self.flat_dim)
         
         # Define outputdensities
         if outputdensity == 'bernoulli':
             self.outputnonlin = torch.sigmoid
-            self.recon_loss = torch.nn.functional.binary_cross_entropy
-        if outputdensity == 'gaussian':
+        elif outputdensity == 'gaussian':
             self.outputnonlin = lambda x: x
-            self.recon_loss = log_normal2
+        else:
+            ValueError('Unknown output density')
     
     #%%
     def encode(self, x):
-        enc = self.encoder(x.view(x.shape[0], -1))
+        enc = self.encoder(x)
         z_mu = self.z_mean(enc)
-        z_logvar = softplus(self.z_var(enc))
+        z_logvar = self.z_var(enc)
         return z_mu, softplus(z_logvar)
     
     #%%
@@ -57,20 +55,18 @@ class VAE(nn.Module):
         return self.outputnonlin(x_mu), softplus(x_var)
     
     #%%
-    def reparameterize(self, mu, logvar, iw_samples=1):
-        if self.training:
-            std = torch.exp(0.5*logvar)
-            eps = torch.randn(iw_samples, *std.shape, device=std.device)
-            return eps.mul(std).add(mu).reshape(-1, std.shape[1])
-        else:
-            return mu.repeat(iw_samples, 1)
+    def reparameterize(self, mu, logvar, eq_samples=1, iw_samples=1):
+        batch_size, latent_dim = mu.shape
+        std = torch.exp(0.5*logvar)
+        eps = torch.randn(batch_size, eq_samples, iw_samples, latent_dim, device=std.device)
+        return eps.mul(std[:,None,None,:]).add(mu[:,None,None,:]).reshape(-1, latent_dim)
     
     #%%
-    def forward(self, x, iw_samples=1):
+    def forward(self, x, eq_samples=1, iw_samples=1):
         mu, logvar = self.encode(x)
-        z = self.reparameterize(mu, logvar, iw_samples)
+        z = self.reparameterize(mu, logvar, eq_samples, iw_samples)
         x_mu, x_var = self.decode(z)
-        return x_mu, x_var, [mu], [logvar]
+        return x_mu, x_var, [z], [mu], [logvar]
     
     #%%
     def sample(self, n):
@@ -78,21 +74,13 @@ class VAE(nn.Module):
         with torch.no_grad():
             z = torch.randn(n, self.latent_dim, device=device)
             x_mu, x_var = self.decode(z)
-            return x_mu, x_var
+            return x_mu
     
     #%%
     def latent_representation(self, x):
         mu, logvar = self.encode(x)
         z = self.reparameterize(mu, logvar)
         return [z]
-    
-    #%%
-    def loss_f(self, data, recon_data, mus, logvars, epoch, warmup):
-        return ELBO(data, recon_data, mus, logvars, epoch, warmup)
-    
-    #%%
-    def __len__(self):
-        return 1
     
     #%%
     def callback(self, writer, loader, epoch):
@@ -103,12 +91,10 @@ class VAE(nn.Module):
             y = np.linspace(-3, 3, 20)
             z = np.stack([array.flatten() for array in np.meshgrid(x,y)], axis=1)
             z = torch.tensor(z, dtype=torch.float32)
-            out = self.decode(z.to(device))
-            writer.add_image('samples/meshgrid', make_grid(out.cpu(), nrow=20),
+            out_mu, out_var = self.decode(z.to(device))
+            writer.add_image('samples/meshgrid', make_grid(out_mu.cpu(), nrow=20),
                              global_step=epoch)
     
 #%%
 if __name__ == '__main__':
     pass
-
-
