@@ -21,6 +21,16 @@ def expm(theta):
     return theta 
 
 #%%
+def get_transformer(name):
+    transformers = {'affine': ST_Affine,
+                    'affinediff': ST_AffineDiff,
+                    'cpab': ST_CPAB
+                    }
+    assert (name in transformers), 'Encoder not found, choose between: ' \
+            + ', '.join([k for k in transformers.keys()])
+    return transformers[name]
+
+#%%
 class ST_Affine(nn.Module):
     def __init__(self, input_shape):
         super(ST_Affine, self).__init__()
@@ -32,6 +42,9 @@ class ST_Affine(nn.Module):
         grid = F.affine_grid(theta, output_size)
         x = F.grid_sample(x, grid)
         return x
+    
+    def trans_theta(self, theta):
+        return theta
     
     def dim(self):
         return 6
@@ -50,6 +63,9 @@ class ST_AffineDiff(nn.Module):
         x = F.grid_sample(x, grid)
         return x
     
+    def trans_theta(self, theta):
+        return expm(theta)
+    
     def dim(self):
         return 6
 
@@ -61,13 +77,19 @@ try:
         def __init__(self, input_shape):
             super(ST_CPAB, self).__init__()
             self.input_shape = input_shape
-            self.cpab = cpab([4,4], zero_boundary=True, 
-                             volume_perservation=False,
-                             device='cuda')
+            self.cpab = cpab([4,4], 
+                             zero_boundary=False, 
+                             volume_perservation=False)
         
         def forward(self, x, theta, inverse=False):
-            out = cpab.transform_data(x, theta)
+            self.cpab.device = x.device # change to the device of the input
+            out = self.cpab.transform_data(data = x, 
+                                           theta = theta,    
+                                           outsize = self.input_shape[1:])
             return out
+        
+        def trans_theta(self, theta):
+            return theta
         
         def dim(self):
             return self.cpab.get_theta_dim()

@@ -12,11 +12,11 @@ from torch.nn.functional import softplus
 import numpy as np
 from torchvision.utils import make_grid
 from ..helper.utility import affine_decompose
-from ..helper.spatial_transformer import ST_AffineDiff, expm
+from ..helper.spatial_transformer import get_transformer
 
 #%%
 class VITAE_CI(nn.Module):
-    def __init__(self, input_shape, latent_dim, encoder, decoder, outputdensity):
+    def __init__(self, input_shape, latent_dim, encoder, decoder, outputdensity, ST_type, **kwargs):
         super(VITAE_CI, self).__init__()
         # Constants
         self.input_shape = input_shape
@@ -26,7 +26,8 @@ class VITAE_CI(nn.Module):
         self.outputdensity = outputdensity
         
         # Spatial transformer
-        self.stn = ST_AffineDiff(input_shape)
+        self.stn = get_transformer(ST_type)(input_shape)
+        self.ST_type = ST_type
         
         # Define encoder and decoder
         self.encoder1 = encoder(input_shape, latent_dim)
@@ -144,7 +145,7 @@ class VITAE_CI(nn.Module):
         with torch.no_grad():
             z1 = torch.randn(n, self.latent_dim, device=device)
             theta_mean, theta_var = self.decode1(z1)
-            theta = expm(theta_mean.reshape(-1, 2, 3))
+            theta = self.stn.trans_theta(theta_mean.reshape(-1, 2, 3))
             return theta.reshape(-1, 6)
     
     #%%

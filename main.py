@@ -13,6 +13,7 @@ from torchvision import transforms
 
 from unsuper.trainer import vae_trainer
 from unsuper.data.mnist_data_loader import mnist_data_loader
+from unsuper.data.perception_data_loader import perception_data_loader
 from unsuper.helper.utility import model_summary
 from unsuper.helper.encoder_decoder import get_encoder, get_decoder
 from unsuper.models import get_model
@@ -20,23 +21,36 @@ from unsuper.models import get_model
 #%%
 def argparser():
     """ Argument parser for the main script """
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--model', type=str, default='vae_mlp', help='model to train')
-    parser.add_argument('--n_epochs', type=int, default=3, help='number of epochs of training')
-    parser.add_argument('--eval_epoch', type=int, default=1000, help='when to evaluate log(p(x))')
-    parser.add_argument('--batch_size', type=int, default=256, help='size of the batches')
-    parser.add_argument('--lr', type=float, default=1e-4, help='adam: learning rate')
-    parser.add_argument('--latent_dim', type=int, default=32, help='dimensionality of the latent space')
-    parser.add_argument('--img_size', type=int, default=28, help='size of each image dimension')
-    parser.add_argument('--channels', type=int, default=1, help='number of image channels')
-    parser.add_argument('--warmup', type=int, default=1, help='number of warmup epochs for kl-terms')
-    parser.add_argument('--density', type=str, default='bernoulli', help='output density')
-    parser.add_argument('--ed_type', type=str, default='mlp', help='encoder/decoder type')
-    parser.add_argument('--eq_samples', type=int, default=1, help='number of MC samples over the expectation over E_q(z|x)')
-    parser.add_argument('--iw_samples', type=int, default=1, help='number of importance weighted samples')
-    parser.add_argument('--classes','--list', type=int, nargs='+', default=[0,1,2,3,4,5,6,7,8,9], help='classes to train on')
-    parser.add_argument('--num_points', type=int, default=10000, help='number of points in each class')
-    parser.add_argument('--logdir', type=str, default='', help='where to store results')
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    # Model settings
+    ms = parser.add_argument_group('Model settings')
+    ms.add_argument('--model', type=str, default='vae', help='model to train')
+    ms.add_argument('--ed_type', type=str, default='mlp', help='encoder/decoder type')
+    ms.add_argument('--stn_type', type=str, default='affinediff', help='transformation type to use')
+    
+    # Training settings
+    ts = parser.add_argument_group('Training settings')
+    ts.add_argument('--n_epochs', type=int, default=10, help='number of epochs of training')
+    ts.add_argument('--eval_epoch', type=int, default=1000, help='when to evaluate log(p(x))')
+    ts.add_argument('--batch_size', type=int, default=256, help='size of the batches')
+    ts.add_argument('--warmup', type=int, default=1, help='number of warmup epochs for kl-terms')
+    ts.add_argument('--lr', type=float, default=1e-4, help='learning rate for adam optimizer')
+    
+    # Hyper settings
+    hp = parser.add_argument_group('Variational settings')
+    hp.add_argument('--latent_dim', type=int, default=32, help='dimensionality of the latent space')
+    hp.add_argument('--density', type=str, default='gaussian', help='output density')    
+    hp.add_argument('--eq_samples', type=int, default=1, help='number of MC samples over the expectation over E_q(z|x)')
+    hp.add_argument('--iw_samples', type=int, default=1, help='number of importance weighted samples')
+    
+    # Dataset settings
+    ds = parser.add_argument_group('Dataset settings')
+    ds.add_argument('--classes','--list', type=int, nargs='+', default=[0,1,2,3,4,5,6,7,8,9], help='classes to train on')
+    ds.add_argument('--num_points', type=int, default=10000, help='number of points in each class')
+    ds.add_argument('--logdir', type=str, default='', help='where to store results')
+    ds.add_argument('--dataset', type=str, default='mnist', help='dataset to use')
+    
+    # Parse and return
     args = parser.parse_args()
     return args
 
@@ -44,7 +58,6 @@ def argparser():
 if __name__ == '__main__':
     # Input arguments
     args = argparser()
-    img_size = (args.channels, args.img_size, args.img_size)
     
     # Logdir for results
     if args.logdir == '':
@@ -53,25 +66,38 @@ if __name__ == '__main__':
         logdir = 'res/' + args.model + '/' + args.logdir
     
     # Load data
+    print('Loading data')
     transformations = transforms.Compose([ 
             #transforms.Pad(padding=7, fill=0),
             #transforms.RandomAffine(degrees=20, translate=(0.1,0.1)), 
             transforms.ToTensor(), 
     ])
-    trainloader, testloader = mnist_data_loader(root='unsuper/data', 
-                                                transform=transformations,
-                                                download=True,
-                                                classes=args.classes,
-                                                num_points=args.num_points,
-                                                batch_size=args.batch_size)
+    if args.dataset == 'mnist':
+        trainloader, testloader = mnist_data_loader(root='unsuper/data', 
+                                                    transform=transformations,
+                                                    download=True,
+                                                    classes=args.classes,
+                                                    num_points=args.num_points,
+                                                    batch_size=args.batch_size)
+    elif args.dataset == 'perception':
+        trainloader, testloader = perception_data_loader(root='unsuper/data', 
+                                                         transform=transformations,
+                                                         download=True,
+                                                         classes=args.classes,
+                                                         num_points=args.num_points,
+                                                         batch_size=args.batch_size)
     
+    # Get size of imput
+    img_size = tuple([*next(iter(trainloader))[0].shape[1:]])
+
     # Construct model
     model_class = get_model(args.model)
     model = model_class(input_shape = img_size,
                         latent_dim = args.latent_dim, 
                         encoder = get_encoder(args.ed_type), 
                         decoder = get_decoder(args.ed_type), 
-                        outputdensity = args.density)
+                        outputdensity = args.density,
+                        ST_type = args.stn_type)
     
     # Summary of model
     model_summary(model)

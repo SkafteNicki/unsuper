@@ -12,11 +12,11 @@ from torch.nn.functional import softplus
 import numpy as np
 from torchvision.utils import make_grid
 from ..helper.utility import affine_decompose
-from ..helper.spatial_transformer import ST_AffineDiff, expm
+from ..helper.spatial_transformer import get_transformer
 
 #%%
 class VITAE_UI(nn.Module):
-    def __init__(self, input_shape, latent_dim, encoder, decoder, outputdensity):
+    def __init__(self, input_shape, latent_dim, encoder, decoder, outputdensity, ST_type, **kwargs):
         super(VITAE_UI, self).__init__()
         # Constants
         self.input_shape = input_shape
@@ -26,8 +26,9 @@ class VITAE_UI(nn.Module):
         self.outputdensity = outputdensity
         
         # Spatial transformer
-        self.stn = ST_AffineDiff(input_shape)
-        
+        self.stn = get_transformer(ST_type)(input_shape)
+        self.ST_type = ST_type
+
         # Define encoder and decoder
         self.encoder1 = encoder(input_shape, latent_dim)
         self.z_mean1 = nn.Linear(self.encoder1.encoder_dim, self.latent_dim)
@@ -138,7 +139,7 @@ class VITAE_UI(nn.Module):
         with torch.no_grad():
             z1 = torch.randn(n, self.latent_dim, device=device)
             theta_mean, theta_var = self.decode1(z1)
-            theta = expm(theta_mean.reshape(-1, 2, 3))
+            theta = self.stn.trans_theta(theta_mean.reshape(-1, 2, 3))
             return theta.reshape(-1, 6)
     
     #%%
@@ -164,20 +165,21 @@ class VITAE_UI(nn.Module):
     
         # Lets log a histogram of the transformation
         theta = self.sample_transformation(1000)
-        for i in range(6):
+        for i in range(theta.shape[1]):
             writer.add_histogram('transformation/a' + str(i), theta[:,i], 
                                  global_step=epoch, bins='auto')
             writer.add_scalar('transformation/mean_a' + str(i), theta[:,i].mean(),
                               global_step=epoch)
         
-        # Also to a decomposition of the matrix and log these values
-        values = affine_decompose(theta.view(-1, 2, 3))
-        tags = ['sx', 'sy', 'm', 'theta', 'tx', 'ty']
-        for i in range(6):
-            writer.add_histogram('transformation/' + tags[i], values[i],
-                                 global_step=epoch, bins='auto')
-            writer.add_scalar('transformation/mean_' + tags[i], values[i].mean(),
-                              global_step=epoch)
+        # Also to a decomposition of the matrix and log these values (only affine case)
+        if self.ST_type == 'affine' or self.ST_type == 'affinediff':
+            values = affine_decompose(theta.view(-1, 2, 3))
+            tags = ['sx', 'sy', 'm', 'theta', 'tx', 'ty']
+            for i in range(6):
+                writer.add_histogram('transformation/' + tags[i], values[i],
+                                     global_step=epoch, bins='auto')
+                writer.add_scalar('transformation/mean_' + tags[i], values[i].mean(),
+                                  global_step=epoch)
             
         # If 2d latent space we can make a fine meshgrid of sampled points
         if self.latent_dim[0] == 2:

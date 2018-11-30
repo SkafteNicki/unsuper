@@ -15,7 +15,7 @@ from torchvision.utils import make_grid
 
 #%%
 class VAE(nn.Module):
-    def __init__(self, input_shape, latent_dim, encoder, decoder, outputdensity):
+    def __init__(self, input_shape, latent_dim, encoder, decoder, outputdensity, **kwargs):
         super(VAE, self).__init__()
         # Constants
         self.input_shape = input_shape
@@ -44,8 +44,8 @@ class VAE(nn.Module):
     def encode(self, x):
         enc = self.encoder(x)
         z_mu = self.z_mean(enc)
-        z_logvar = self.z_var(enc)
-        return z_mu, softplus(z_logvar)
+        z_var = self.z_var(enc)
+        return z_mu, softplus(z_var)
     
     #%%
     def decode(self, z):
@@ -55,18 +55,17 @@ class VAE(nn.Module):
         return self.outputnonlin(x_mu), softplus(x_var)
     
     #%%
-    def reparameterize(self, mu, logvar, eq_samples=1, iw_samples=1):
+    def reparameterize(self, mu, var, eq_samples=1, iw_samples=1):
         batch_size, latent_dim = mu.shape
-        std = torch.exp(0.5*logvar)
-        eps = torch.randn(batch_size, eq_samples, iw_samples, latent_dim, device=std.device)
-        return eps.mul(std[:,None,None,:]).add(mu[:,None,None,:]).reshape(-1, latent_dim)
+        eps = torch.randn(batch_size, eq_samples, iw_samples, latent_dim, device=var.device)
+        return mu[:,None,None,:] + var[:,None,None,:].sqrt() * eps
     
     #%%
     def forward(self, x, eq_samples=1, iw_samples=1):
-        mu, logvar = self.encode(x)
-        z = self.reparameterize(mu, logvar, eq_samples, iw_samples)
+        z_mu, z_var = self.encode(x)
+        z = self.reparameterize(z_mu, z_var, eq_samples, iw_samples)
         x_mu, x_var = self.decode(z)
-        return x_mu, x_var, [z], [mu], [logvar]
+        return x_mu, x_var, [z], [z_mu], [z_var]
     
     #%%
     def sample(self, n):
@@ -78,8 +77,8 @@ class VAE(nn.Module):
     
     #%%
     def latent_representation(self, x):
-        mu, logvar = self.encode(x)
-        z = self.reparameterize(mu, logvar)
+        mu, var = self.encode(x)
+        z = self.reparameterize(mu, var)
         return [z]
     
     #%%

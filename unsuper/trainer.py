@@ -42,7 +42,7 @@ class vae_trainer:
             self.model.cuda()
     
     #%%
-    def fit(self, trainloader, n_epochs=10, warmup=None, logdir='',
+    def fit(self, trainloader, n_epochs=10, warmup=1, logdir='',
             testloader=None, eq_samples=1, iw_samples=1, eval_epoch=10000):
         """ Fits the supplied model to a training set 
         Arguments:
@@ -119,8 +119,8 @@ class vae_trainer:
                 
                 for j, kl_loss in enumerate(kl_terms):
                     writer.add_scalar('train/KL_loss' + str(j), kl_loss, iteration)
-            
-            progress_bar.set_postfix({'Average loss': train_loss / len(trainloader)})
+                
+            progress_bar.set_postfix({'Average ELBO': train_loss / len(trainloader)})
             progress_bar.close()
             
             # Log for the training set
@@ -173,8 +173,8 @@ class vae_trainer:
                             # We need to do this for each individual points, because
                             # iw_samples is high (running out of GPU memory)
                             for d in data:
-                                out = self.model(d[None], 1, 5000)
-                                loss, _, _ = vae_loss(d, *out, 1, 5000,
+                                out = self.model(d[None], 1, 1000)
+                                loss, _, _ = vae_loss(d, *out, 1, 1000  ,
                                                       self.model.latent_dim, 
                                                       epoch, warmup, 
                                                       self.outputdensity)

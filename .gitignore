@@ -1,4 +1,5 @@
-.spyproject
+.spyproject/
 __pycache__
-MNIST/
 res/
+unsuper/data/MNIST/
+unsuper/data/PERCEPTION/

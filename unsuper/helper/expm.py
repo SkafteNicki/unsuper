@@ -100,7 +100,7 @@ def torch_expm(A):
     zero = torch.Tensor([0.0]).type(A.dtype).to(A.device)
     n_squarings = torch.max(zero, torch.ceil(torch_log2(A_fro / maxnorm)))
     Ascaled = A / 2.0**n_squarings    
-    n_squarings = n_squarings.flatten().type(torch.int32)
+    n_squarings = n_squarings.flatten().type(torch.int64)
     
     # Pade 13 approximation
     U, V = torch_pade13(Ascaled)
@@ -108,15 +108,14 @@ def torch_expm(A):
     Q = -U + V
     R, _ = torch.gesv(P, Q) # solve P = Q*R
     
-    # Unsquaring step
-    expmA = [ ]
-    for i in range(n_A):
-        l = [R[i]]
-        for _ in range(n_squarings[i]):
-            l.append(l[-1].mm(l[-1]))
-        expmA.append(l[-1])
-    
-    return torch.stack(expmA)
+    # Unsquaring step    
+    n = n_squarings.max()
+    res = [R]
+    for i in range(n):
+        res.append(res[-1].matmul(res[-1]))
+    R = torch.stack(res)
+    expmA = R[n_squarings, torch.arange(n_A)]
+    return expmA
 
 #%%
 def torch_log2(x):
@@ -142,7 +141,7 @@ if __name__ == '__main__':
     from scipy.linalg import expm
     import numpy as np
     n = 10
-    A = torch.randn(n,3,3)
+    A = 5*torch.randn(n,3,3)
     A[:,2,:] = 0
     
     expm_scipy = np.zeros_like(A)
