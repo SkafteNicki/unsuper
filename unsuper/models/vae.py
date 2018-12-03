@@ -58,7 +58,7 @@ class VAE(nn.Module):
     def reparameterize(self, mu, var, eq_samples=1, iw_samples=1):
         batch_size, latent_dim = mu.shape
         eps = torch.randn(batch_size, eq_samples, iw_samples, latent_dim, device=var.device)
-        return mu[:,None,None,:] + var[:,None,None,:].sqrt() * eps
+        return (mu[:,None,None,:] + var[:,None,None,:].sqrt() * eps).reshape(-1, latent_dim)
     
     #%%
     def forward(self, x, eq_samples=1, iw_samples=1):

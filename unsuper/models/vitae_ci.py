@@ -56,8 +56,8 @@ class VITAE_CI(nn.Module):
     def encode1(self, x):
         enc = self.encoder1(x)
         z_mu = self.z_mean1(enc)
-        z_logvar = self.z_var1(enc)
-        return z_mu, softplus(z_logvar)
+        z_var = self.z_var1(enc)
+        return z_mu, softplus(z_var)
     
     #%%
     def decode1(self, z):
@@ -70,8 +70,8 @@ class VITAE_CI(nn.Module):
     def encode2(self, x):
         enc = self.encoder2(x)
         z_mu = self.z_mean2(enc)
-        z_logvar = self.z_var2(enc)
-        return z_mu, softplus(z_logvar)
+        z_var = self.z_var2(enc)
+        return z_mu, softplus(z_var)
     
     #%%
     def decode2(self, z):
@@ -81,32 +81,31 @@ class VITAE_CI(nn.Module):
         return self.outputnonlin(x_mean), softplus(x_var)
 
     #%%
-    def reparameterize(self, mu, logvar, eq_samples=1, iw_samples=1):
+    def reparameterize(self, mu, var, eq_samples=1, iw_samples=1):
         batch_size, latent_dim = mu.shape
-        std = torch.exp(0.5*logvar)
-        eps = torch.randn(batch_size, eq_samples, iw_samples, latent_dim, device=std.device)
-        return eps.mul(std[:,None,None,:]).add(mu[:,None,None,:]).reshape(-1, latent_dim)
+        eps = torch.randn(batch_size, eq_samples, iw_samples, latent_dim, device=var.device)
+        return (mu[:,None,None,:] + var[:,None,None,:].sqrt() * eps).reshape(-1, latent_dim)
     
     #%%
     def forward(self, x, eq_samples=1, iw_samples=1):
         # Encode/decode transformer space
-        mu1, logvar1 = self.encode1(x)
-        z1 = self.reparameterize(mu1, logvar1, eq_samples, iw_samples)
+        mu1, var1 = self.encode1(x)
+        z1 = self.reparameterize(mu1, var1, eq_samples, iw_samples)
         theta_mean, theta_var = self.decode1(z1)
         
         # Transform input
         x_new = self.stn(x.repeat(eq_samples*iw_samples, 1, 1, 1), -theta_mean)
         
         # Encode/decode semantic space
-        mu2, logvar2 = self.encode2(x_new)
-        z2 = self.reparameterize(mu2, logvar2, 1, 1)
+        mu2, var2 = self.encode2(x_new)
+        z2 = self.reparameterize(mu2, var2, 1, 1)
         x_mean, x_var = self.decode2(z2)
         
         # "Detransform" output
         x_mean = self.stn(x_mean, theta_mean)
         x_var = self.stn(x_var, theta_mean)
         
-        return x_mean, x_var, [z1, z2], [mu1, mu2], [logvar1, logvar2]
+        return x_mean, x_var, [z1, z2], [mu1, mu2], [var1, var2]
 
     #%%
     def sample(self, n):
@@ -150,10 +149,10 @@ class VITAE_CI(nn.Module):
     
     #%%
     def latent_representation(self, x):
-        mu1, logvar1 = self.encode1(x)
-        mu2, logvar2 = self.encode2(x)
-        z1 = self.reparameterize(mu1, logvar1)
-        z2 = self.reparameterize(mu2, logvar2)
+        mu1, var1 = self.encode1(x)
+        mu2, var2 = self.encode2(x)
+        z1 = self.reparameterize(mu1, var1)
+        z2 = self.reparameterize(mu2, var2)
         return [z1, z2]
 
     #%%
