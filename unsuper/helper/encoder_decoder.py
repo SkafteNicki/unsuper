@@ -22,9 +22,7 @@ def get_encoder(encoder_name):
 
 #%%
 def get_decoder(decoder_name):
-    models = {'mlp': mlp_decoder,
-              'conv': conv_decoder,
-              }
+    models = {'mlp': mlp_decoder}
     assert (decoder_name in models), 'Decoder not found, choose between: ' \
             + ', '.join([k for k in models.keys()])
     return models[decoder_name]
@@ -34,81 +32,53 @@ class mlp_encoder(nn.Module):
     def __init__(self, input_shape, latent_dim):
         super(mlp_encoder, self).__init__()
         self.flat_dim = np.prod(input_shape)
-        self.encoder = nn.Sequential(
+        self.encoder_mu = nn.Sequential(
             nn.BatchNorm1d(self.flat_dim),
             nn.Linear(self.flat_dim, 512),
             nn.LeakyReLU(),
             nn.Linear(512, 256),
-            nn.LeakyReLU()
+            nn.LeakyReLU(),
+            nn.Linear(256, latent_dim)
         )
-        self.encoder_dim = 256
+        self.encoder_var = nn.Sequential(
+            nn.BatchNorm1d(self.flat_dim),
+            nn.Linear(self.flat_dim, 512),
+            nn.LeakyReLU(),
+            nn.Linear(512, 256),
+            nn.LeakyReLU(),
+            nn.Linear(256, latent_dim)
+            nn.Softplus(),
+        )
         
     def forward(self, x):
-        return self.encoder(x.view(x.shape[0], -1))
+        x = x.view(x.shape[0], -1)
+        z_mu = self.encoder_mu(x)
+        z_var = self.encoder_var(x)
+        return z_mu, z_var
 
 #%%
 class mlp_decoder(nn.Module):
-    def __init__(self, output_shape, latent_dim):
+    def __init__(self, output_shape, latent_dim, outputnonlin):
         super(mlp_decoder, self).__init__()
         self.flat_dim = np.prod(output_shape)
-        self.decoder = nn.Sequential(
+        self.decoder_mu = nn.Sequential(
             nn.Linear(latent_dim, 256),
             nn.LeakyReLU(),
             nn.Linear(256, 512),
             nn.LeakyReLU(),
+            nn.Linear(512, self.flat_dim),
+            outputnonlin
         )
-        self.decoder_dim = 512
+        self.decoder_var = nn.Sequential(
+            nn.Linear(latent_dim, 256),
+            nn.LeakyReLU(),
+            nn.Linear(256, 512),
+            nn.LeakyReLU(),
+            nn.Linear(512, self.flat_dim)
+            nn.Softplus()
+        )
         
     def forward(self, z):
-        return self.decoder(z)
-
-#%%
-class conv_encoder(nn.Module):
-    def __init__(self, input_shape, latent_dim):
-        super(conv_encoder, self).__init__()
-        c,h,w = input_shape
-        self.z_dim = int(np.ceil(h/2**2)) # receptive field downsampled 2 times
-        self.encoder = nn.Sequential(
-            nn.BatchNorm2d(c),
-            nn.Conv2d(c, 32, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm2d(32),
-            nn.LeakyReLU(),
-            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm2d(64),
-            nn.LeakyReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(64),
-            nn.LeakyReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(64),
-            nn.LeakyReLU()
-        )
-        self.encoder_dim = (64, self.z_dim, self.z_dim)
-    
-    def forward(self, x):
-        return self.encoder(x)
-    
-#%%
-class conv_decoder(nn.Module):
-    def __init__(self, output_shape, latent_dim):
-        super(conv_decoder, self).__init__() 
-        c,h,w = output_shape
-        self.z_dim = int(np.ceil(h/2**2))        
-        self.decoder = nn.Sequential(
-            nn.Linear(latent_dim, 64 * self.z_dim**2),
-            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(64),
-            nn.LeakyReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(64),
-            nn.LeakyReLU(),
-            nn.ConvTranspose2d(64, 32, kernel_size=3, stride=2, padding=0),
-            nn.BatchNorm2d(32),
-            nn.LeakyReLU(),
-            nn.ConvTranspose2d(32, 1, kernel_size=3, stride=2, padding=1),
-            CenterCrop(h,w),
-        )
-        self.decoder_dim = (1, h, w)
-    
-    def forward(self, z):
-        return self.decoder(z)
+        x_mu = self.decoder_mu(z).reshape(-1, *output_shape)
+        x_var = self.decoder_var(z).reshape(-1, *output_shape)
+        return x_mu, x_var

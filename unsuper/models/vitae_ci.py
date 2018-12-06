@@ -20,7 +20,6 @@ class VITAE_CI(nn.Module):
         super(VITAE_CI, self).__init__()
         # Constants
         self.input_shape = input_shape
-        self.flat_dim = np.prod(input_shape)
         self.latent_dim = latent_dim
         self.latent_spaces = 2
         self.outputdensity = outputdensity
@@ -29,56 +28,20 @@ class VITAE_CI(nn.Module):
         self.stn = get_transformer(ST_type)(input_shape)
         self.ST_type = ST_type
         
-        # Define encoder and decoder
-        self.encoder1 = encoder(input_shape, latent_dim)
-        self.z_mean1 = nn.Linear(self.encoder1.encoder_dim, self.latent_dim)
-        self.z_var1 = nn.Linear(self.encoder1.encoder_dim, self.latent_dim)
-        self.decoder1 = decoder(input_shape, latent_dim)
-        self.theta_mean = nn.Linear(self.decoder1.decoder_dim, self.stn.dim())
-        self.theta_var = nn.Linear(self.decoder1.decoder_dim, self.stn.dim())
-        
-        self.encoder2 = encoder(input_shape, latent_dim)
-        self.z_mean2 = nn.Linear(self.encoder2.encoder_dim, self.latent_dim)
-        self.z_var2 = nn.Linear(self.encoder2.encoder_dim, self.latent_dim)
-        self.decoder2 = decoder(input_shape, latent_dim)
-        self.x_mean = nn.Linear(self.decoder2.decoder_dim, self.flat_dim)
-        self.x_var = nn.Linear(self.decoder2.decoder_dim, self.flat_dim)
-        
         # Define outputdensities
         if outputdensity == 'bernoulli':
-            self.outputnonlin = torch.sigmoid
+            outputnonlin = torch.sigmoid
         elif outputdensity == 'gaussian':
-            self.outputnonlin = lambda x: x
+            outputnonlin = lambda x: x
         else:
             ValueError('Unknown output density')
-            
-    #%%
-    def encode1(self, x):
-        enc = self.encoder1(x)
-        z_mu = self.z_mean1(enc)
-        z_var = self.z_var1(enc)
-        return z_mu, softplus(z_var)
-    
-    #%%
-    def decode1(self, z):
-        dec = self.decoder1(z)
-        theta_mean = self.theta_mean(dec)
-        theta_var = self.theta_var(dec)
-        return theta_mean, softplus(theta_var)
-    
-    #%%
-    def encode2(self, x):
-        enc = self.encoder2(x)
-        z_mu = self.z_mean2(enc)
-        z_var = self.z_var2(enc)
-        return z_mu, softplus(z_var)
-    
-    #%%
-    def decode2(self, z):
-        dec = self.decoder2(z)
-        x_mean = self.x_mean(dec).view(-1, *self.input_shape)
-        x_var = self.x_var(dec).view(-1, *self.input_shape)
-        return self.outputnonlin(x_mean), softplus(x_var)
+        
+        # Define encoder and decoder
+        self.encoder1 = encoder(input_shape, latent_dim)
+        self.decoder1 = decoder((self.stn.dim(),), latent_dim, lambda x: x)
+        
+        self.encoder2 = encoder(input_shape, latent_dim)
+        self.decoder2 = decoder(input_shape, latent_dim, outputnonlin)
 
     #%%
     def reparameterize(self, mu, var, eq_samples=1, iw_samples=1):
@@ -87,23 +50,24 @@ class VITAE_CI(nn.Module):
         return (mu[:,None,None,:] + var[:,None,None,:].sqrt() * eps).reshape(-1, latent_dim)
     
     #%%
-    def forward(self, x, eq_samples=1, iw_samples=1):
+    def forward(self, x, eq_samples=1, iw_samples=1, switch):
         # Encode/decode transformer space
-        mu1, var1 = self.encode1(x)
+        mu1, var1 = self.encoder1(x)
         z1 = self.reparameterize(mu1, var1, eq_samples, iw_samples)
-        theta_mean, theta_var = self.decode1(z1)
+        theta_mean, theta_var = self.decoder1(z1)
         
         # Transform input
         x_new = self.stn(x.repeat(eq_samples*iw_samples, 1, 1, 1), -theta_mean)
         
         # Encode/decode semantic space
-        mu2, var2 = self.encode2(x_new)
+        mu2, var2 = self.encoder2(x_new)
         z2 = self.reparameterize(mu2, var2, 1, 1)
         x_mean, x_var = self.decode2(z2)
         
         # "Detransform" output
         x_mean = self.stn(x_mean, theta_mean)
         x_var = self.stn(x_var, theta_mean)
+        x_var = switch*x_var + (1-switch)*0.02**2
         
         return x_mean, x_var, [z1, z2], [mu1, mu2], [var1, var2]
 
@@ -113,8 +77,8 @@ class VITAE_CI(nn.Module):
         with torch.no_grad():
             z1 = torch.randn(n, self.latent_dim, device=device)
             z2 = torch.randn(n, self.latent_dim, device=device)
-            theta_mean, theta_var = self.decode1(z1)
-            x_mean, x_var = self.decode2(z2)
+            theta_mean, _ = self.decoder1(z1)
+            x_mean, _ = self.decoder2(z2)
             out_mean = self.stn(x_mean, theta_mean)
             return out_mean
 
@@ -124,7 +88,7 @@ class VITAE_CI(nn.Module):
         with torch.no_grad():
             img = img.repeat(n, 1, 1, 1).to(device)
             z1 = torch.randn(n, self.latent_dim, device=device)
-            theta_mean, theta_var = self.decode1(z1)
+            theta_mean, _ = self.decoder1(z1)
             out = self.stn(img, theta_mean)
             return out
 
@@ -134,7 +98,7 @@ class VITAE_CI(nn.Module):
         with torch.no_grad():
             trans = trans[None, :].repeat(n, 1).to(device)
             z2 = torch.randn(n, self.latent_dim, device=device)
-            x_mean, x_var = self.decode2(z2)
+            x_mean, _ = self.decoder2(z2)
             out = self.stn(x_mean, trans)
             return out
     
@@ -143,17 +107,15 @@ class VITAE_CI(nn.Module):
         device = next(self.parameters()).device
         with torch.no_grad():
             z1 = torch.randn(n, self.latent_dim, device=device)
-            theta_mean, theta_var = self.decode1(z1)
+            theta_mean, _ = self.decode1(z1)
             theta = self.stn.trans_theta(theta_mean.reshape(-1, 2, 3))
             return theta.reshape(-1, 6)
     
     #%%
     def latent_representation(self, x):
-        mu1, var1 = self.encode1(x)
-        mu2, var2 = self.encode2(x)
-        z1 = self.reparameterize(mu1, var1)
-        z2 = self.reparameterize(mu2, var2)
-        return [z1, z2]
+        z_mu1, _ = self.encoder1(x)
+        z_mu2, _ = self.encoder2(x)
+        return [z_mu1, z_mu2]
 
     #%%
     def callback(self, writer, loader, epoch):
@@ -193,7 +155,7 @@ class VITAE_CI(nn.Module):
             z = np.stack([array.flatten() for array in np.meshgrid(x,y)], axis=1)
             z = torch.tensor(z, dtype=torch.float32)
             trans = torch.tensor([0,0,0,0,0,0], dtype=torch.float32).repeat(20*20, 1, 1)
-            x_mean, x_var = self.decode2(z.to(device))
+            x_mean, x_var = self.decoder2(z.to(device))
             out = self.stn(x_mean, trans.to(device))
             writer.add_image('samples/meshgrid', make_grid(out.cpu(), nrow=20),
                              global_step=epoch)

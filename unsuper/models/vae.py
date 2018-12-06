@@ -9,7 +9,6 @@ Created on Mon Nov  5 12:33:13 2018
 #%%
 import torch
 from torch import nn
-from torch.nn.functional import softplus
 import numpy as np
 from torchvision.utils import make_grid
 
@@ -24,35 +23,17 @@ class VAE(nn.Module):
         self.latent_spaces = 1
         self.outputdensity = outputdensity
         
-        # Define encoder and decoder
-        self.encoder = encoder(input_shape, latent_dim)
-        self.z_mean = nn.Linear(self.encoder.encoder_dim, self.latent_dim)
-        self.z_var = nn.Linear(self.encoder.encoder_dim, self.latent_dim)
-        self.decoder = decoder(input_shape, latent_dim)
-        self.x_mean = nn.Linear(self.decoder.decoder_dim, self.flat_dim)
-        self.x_var = nn.Linear(self.decoder.decoder_dim, self.flat_dim)
-        
         # Define outputdensities
         if outputdensity == 'bernoulli':
-            self.outputnonlin = torch.sigmoid
+            outputnonlin = torch.sigmoid
         elif outputdensity == 'gaussian':
-            self.outputnonlin = lambda x: x
+            outputnonlin = lambda x: x
         else:
             ValueError('Unknown output density')
-    
-    #%%
-    def encode(self, x):
-        enc = self.encoder(x)
-        z_mu = self.z_mean(enc)
-        z_var = self.z_var(enc)
-        return z_mu, softplus(z_var)
-    
-    #%%
-    def decode(self, z):
-        dec = self.decoder(z)
-        x_mu = self.x_mean(dec).view(-1, *self.input_shape)
-        x_var = self.x_var(dec).view(-1, *self.input_shape)
-        return self.outputnonlin(x_mu), softplus(x_var)
+        
+        # Define encoder and decoder
+        self.encoder = encoder(input_shape, latent_dim)
+        self.decoder = decoder(input_shape, latent_dim, outputnonlin)
     
     #%%
     def reparameterize(self, mu, var, eq_samples=1, iw_samples=1):
@@ -61,10 +42,11 @@ class VAE(nn.Module):
         return (mu[:,None,None,:] + var[:,None,None,:].sqrt() * eps).reshape(-1, latent_dim)
     
     #%%
-    def forward(self, x, eq_samples=1, iw_samples=1):
-        z_mu, z_var = self.encode(x)
+    def forward(self, x, eq_samples=1, iw_samples=1, switch=1.0):
+        z_mu, z_var = self.encoder(x)
         z = self.reparameterize(z_mu, z_var, eq_samples, iw_samples)
         x_mu, x_var = self.decode(z)
+        x_var = switch*x_var + (1-switch)*0.02**2
         return x_mu, x_var, [z], [z_mu], [z_var]
     
     #%%
@@ -72,14 +54,13 @@ class VAE(nn.Module):
         device = next(self.parameters()).device
         with torch.no_grad():
             z = torch.randn(n, self.latent_dim, device=device)
-            x_mu, x_var = self.decode(z)
+            x_mu, x_var = self.decoder(z)
             return x_mu
     
     #%%
     def latent_representation(self, x):
-        mu, var = self.encode(x)
-        z = self.reparameterize(mu, var)
-        return [z]
+        z_mu, z_var = self.encoder(x)
+        return [z_mu]
     
     #%%
     def callback(self, writer, loader, epoch):
@@ -90,7 +71,7 @@ class VAE(nn.Module):
             y = np.linspace(-3, 3, 20)
             z = np.stack([array.flatten() for array in np.meshgrid(x,y)], axis=1)
             z = torch.tensor(z, dtype=torch.float32)
-            out_mu, out_var = self.decode(z.to(device))
+            out_mu, out_var = self.decoder(z.to(device))
             writer.add_image('samples/meshgrid', make_grid(out_mu.cpu(), nrow=20),
                              global_step=epoch)
     
