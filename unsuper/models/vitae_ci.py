@@ -8,7 +8,6 @@ Created on Tue Nov  6 08:53:22 2018
 #%%
 import torch
 from torch import nn
-from torch.nn.functional import softplus
 import numpy as np
 from torchvision.utils import make_grid
 from ..helper.utility import affine_decompose
@@ -50,7 +49,7 @@ class VITAE_CI(nn.Module):
         return (mu[:,None,None,:] + var[:,None,None,:].sqrt() * eps).reshape(-1, latent_dim)
     
     #%%
-    def forward(self, x, eq_samples=1, iw_samples=1, switch):
+    def forward(self, x, eq_samples=1, iw_samples=1, switch=1.0):
         # Encode/decode transformer space
         mu1, var1 = self.encoder1(x)
         z1 = self.reparameterize(mu1, var1, eq_samples, iw_samples)

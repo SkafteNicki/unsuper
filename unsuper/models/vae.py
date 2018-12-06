@@ -25,9 +25,9 @@ class VAE(nn.Module):
         
         # Define outputdensities
         if outputdensity == 'bernoulli':
-            outputnonlin = torch.sigmoid
+            outputnonlin = nn.Sigmoid()
         elif outputdensity == 'gaussian':
-            outputnonlin = lambda x: x
+            outputnonlin = nn.ReLU()
         else:
             ValueError('Unknown output density')
         
@@ -45,8 +45,8 @@ class VAE(nn.Module):
     def forward(self, x, eq_samples=1, iw_samples=1, switch=1.0):
         z_mu, z_var = self.encoder(x)
         z = self.reparameterize(z_mu, z_var, eq_samples, iw_samples)
-        x_mu, x_var = self.decode(z)
-        x_var = switch*x_var + (1-switch)*0.02**2
+        x_mu, x_var = self.decoder(z)
+        x_var = switch*x_var + (1-switch)*(0.02**2)
         return x_mu, x_var, [z], [z_mu], [z_var]
     
     #%%

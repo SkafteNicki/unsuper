@@ -13,9 +13,7 @@ from ..helper.utility import CenterCrop
 
 #%%
 def get_encoder(encoder_name):
-    models = {'mlp': mlp_encoder,
-              'conv': conv_encoder,
-              }
+    models = {'mlp': mlp_encoder}
     assert (encoder_name in models), 'Encoder not found, choose between: ' \
             + ', '.join([k for k in models.keys()])
     return models[encoder_name]
@@ -46,7 +44,7 @@ class mlp_encoder(nn.Module):
             nn.LeakyReLU(),
             nn.Linear(512, 256),
             nn.LeakyReLU(),
-            nn.Linear(256, latent_dim)
+            nn.Linear(256, latent_dim),
             nn.Softplus(),
         )
         
@@ -61,6 +59,7 @@ class mlp_decoder(nn.Module):
     def __init__(self, output_shape, latent_dim, outputnonlin):
         super(mlp_decoder, self).__init__()
         self.flat_dim = np.prod(output_shape)
+        self.output_shape = output_shape
         self.decoder_mu = nn.Sequential(
             nn.Linear(latent_dim, 256),
             nn.LeakyReLU(),
@@ -74,11 +73,11 @@ class mlp_decoder(nn.Module):
             nn.LeakyReLU(),
             nn.Linear(256, 512),
             nn.LeakyReLU(),
-            nn.Linear(512, self.flat_dim)
+            nn.Linear(512, self.flat_dim),
             nn.Softplus()
         )
         
     def forward(self, z):
-        x_mu = self.decoder_mu(z).reshape(-1, *output_shape)
-        x_var = self.decoder_var(z).reshape(-1, *output_shape)
+        x_mu = self.decoder_mu(z).reshape(-1, *self.output_shape)
+        x_var = self.decoder_var(z).reshape(-1, *self.output_shape)
         return x_mu, x_var

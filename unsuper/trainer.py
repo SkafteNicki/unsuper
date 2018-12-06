@@ -92,7 +92,8 @@ class vae_trainer:
             
                 # Feed forward data
                 data = data.reshape(-1, *self.input_shape).to(self.device)
-                out = self.model(data, eq_samples, iw_samples)
+                switch = 1.0 if epoch > warmup else 0.0
+                out = self.model(data, eq_samples, iw_samples, switch)
                 
                 # Calculat loss
                 loss, recon_term, kl_terms = vae_loss(data, *out, 
