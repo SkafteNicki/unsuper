@@ -40,17 +40,17 @@ class PERCEPTION(data.Dataset):
         
         # Load file
         if self.train:
-            self.data = torch.tensor(np.load('unsuper/data/PERCEPTION/training.npy')[:,0,:,:])
+            self.data = torch.tensor(np.load('unsuper/data/PERCEPTION/training_f10.npy'))
         else:
-            self.data = torch.tensor(np.load('unsuper/data/PERCEPTION/testing.npy')[:,0,:,:])
+            self.data = torch.tensor(np.load('unsuper/data/PERCEPTION/testing_f10.npy'))
         self.targets = torch.zeros(self.data.shape[0])
+        
+        # Cut of data
+        self.data = self.data[:num_points]
+        self.targets = self.targets[:num_points]
     
     def __getitem__(self, index):
         img, target = self.data[index], int(self.targets[index])
-
-        # doing this so that it is consistent with all other datasets
-        # to return a PIL Image
-        img = Image.fromarray(img.numpy(), mode='L')
 
         if self.transform is not None:
             img = self.transform(img)

@@ -10,6 +10,13 @@ import os
 import torch
 from torch import nn
 
+#%% 
+def memconsumption():
+    import gc
+    for obj in gc.get_objects():
+        if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+            print(type(obj), obj.size())
+
 #%%
 def get_dir(file):
     """ Get the folder of specified file """
@@ -39,6 +46,14 @@ class CenterCrop(nn.Module):
         y1 = int(round((w - self.w) / 2.))
         out = x[:,:,x1:x1+self.h,y1:y1+self.w]
         return out
+
+#%%
+class Identity(nn.Module):
+    def __init__(self):
+        super(Identity, self).__init__()
+
+    def forward(self, x):
+        return x
     
 #%%
 def affine_decompose(A):

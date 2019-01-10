@@ -30,15 +30,16 @@ class vae_trainer:
         self.optimizer = optimizer
         self.input_shape = input_shape
         self.outputdensity = model.outputdensity
+        self.use_cuda = True
         
         # Get the device
-        if torch.cuda.is_available():
+        if torch.cuda.is_available() and self.use_cuda:
             self.device = torch.device('cuda')
         else:
             self.device = torch.device('cpu')
             
         # Move model to gpu (if avaible)
-        if torch.cuda.is_available():
+        if torch.cuda.is_available() and self.use_cuda:
             self.model.cuda()
     
     #%%
@@ -91,7 +92,7 @@ class vae_trainer:
                 self.optimizer.zero_grad()
             
                 # Feed forward data
-                data = data.reshape(-1, *self.input_shape).to(self.device)
+                data = data.reshape(-1, *self.input_shape).to(torch.float32).to(self.device)
                 switch = 1.0 if epoch > warmup else 0.0
                 out = self.model(data, eq_samples, iw_samples, switch)
                 
@@ -120,19 +121,22 @@ class vae_trainer:
                 
                 for j, kl_loss in enumerate(kl_terms):
                     writer.add_scalar('train/KL_loss' + str(j), kl_loss, iteration)
+                del loss, recon_term, kl_loss, out
                 
             progress_bar.set_postfix({'Average ELBO': train_loss / len(trainloader)})
             progress_bar.close()
             
             # Log for the training set
-            n = 10
-            data_train = next(iter(trainloader))[0].to(self.device)[:n]
-            recon_data_train = self.model(data_train)[0]
-            writer.add_image('train/recon', make_grid(torch.cat([data_train, 
-                         recon_data_train]).cpu(), nrow=n), global_step=epoch)
-            samples = self.model.sample(n*n)    
-            writer.add_image('samples/samples', make_grid(samples.cpu(), nrow=n), 
-                             global_step=epoch)
+            with torch.no_grad():
+                n = 10
+                data_train = next(iter(trainloader))[0].to(torch.float32).to(self.device)[:n]
+                recon_data_train = self.model(data_train)[0]
+                writer.add_image('train/recon', make_grid(torch.cat([data_train, 
+                             recon_data_train]).cpu(), nrow=n), global_step=epoch)
+                samples = self.model.sample(n*n)    
+                writer.add_image('samples/samples', make_grid(samples.cpu(), nrow=n), 
+                                 global_step=epoch)
+                del data_train, recon_data_train, samples
             
             if testloader:
                 with torch.no_grad():
@@ -140,7 +144,7 @@ class vae_trainer:
                     self.model.eval()
                     test_loss, test_recon, test_kl = 0, 0, len(kl_terms)*[0]
                     for i, (data, _) in enumerate(testloader):
-                        data = data.reshape(-1, *self.input_shape).to(self.device)
+                        data = data.reshape(-1, *self.input_shape).to(torch.float32).to(self.device)
                         out = self.model(data, 1, 1)    
                         loss, recon_term, kl_terms = vae_loss(data, *out, 1, 1, 
                                                               self.model.latent_dim, 
@@ -155,11 +159,12 @@ class vae_trainer:
                     for j, kl_loss in enumerate(kl_terms):
                         writer.add_scalar('test/KL_loss' + str(j), kl_loss, iteration)
             
-                    data_test = next(iter(testloader))[0].to(self.device)[:n]
+                    data_test = next(iter(testloader))[0].to(torch.float32).to(self.device)[:n]
                     recon_data_test = self.model(data_test)[0]
                     writer.add_image('test/recon', make_grid(torch.cat([data_test, 
                              recon_data_test]).cpu(), nrow=n), global_step=epoch)
-                    
+                    del data, out, loss, recon_term, kl_terms, data_test, recon_data_test
+
                     # Callback, if a model have something special to log
                     self.model.callback(writer, testloader, epoch)
                     
@@ -170,7 +175,7 @@ class vae_trainer:
                                             total=len(testloader.dataset), unit='samples')
                         test_loss, test_recon, test_kl = 0, 0, len(kl_terms)*[0]
                         for i, (data, _) in enumerate(testloader):
-                            data = data.reshape(-1, *self.input_shape).to(self.device)
+                            data = data.reshape(-1, *self.input_shape).to(torch.float32).to(self.device)
                             # We need to do this for each individual points, because
                             # iw_samples is high (running out of GPU memory)
                             for d in data:
@@ -187,11 +192,20 @@ class vae_trainer:
         print('Total train time', time.time() - start)
         
         # Save the embeddings
-        print('Saving embeddings')
+        print('Saving embeddings, maybe?')
         with torch.no_grad():
-            self.save_embeddings(writer, trainloader, name='train')
-            if testloader: self.save_embeddings(writer, testloader, name='test')
-        
+            try:
+                self.save_embeddings(writer, trainloader, name='train')
+            except Exception as e:
+                print('Did not save embeddings for training set')
+                print(e)
+            if testloader: 
+                try:
+                    self.save_embeddings(writer, testloader, name='test')
+                except:
+                    print('Did not save embeddings for test set')
+                    print(e)
+
         # Close summary writer
         writer.close()
         
@@ -212,7 +226,7 @@ class vae_trainer:
         counter = 0
         for i, (data, label) in enumerate(loader):
             n = data.shape[0]
-            data = data.reshape(-1, *self.input_shape).to(self.device)
+            data = data.reshape(-1, *self.input_shape).to(torch.float32).to(self.device)
             label = label.to(self.device)
             z = self.model.latent_representation(data)
             all_data[counter:counter+n] = data.cpu()

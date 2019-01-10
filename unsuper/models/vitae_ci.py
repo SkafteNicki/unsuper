@@ -10,7 +10,7 @@ import torch
 from torch import nn
 import numpy as np
 from torchvision.utils import make_grid
-from ..helper.utility import affine_decompose
+from ..helper.utility import affine_decompose, Identity
 from ..helper.spatial_transformer import get_transformer
 
 #%%
@@ -29,15 +29,15 @@ class VITAE_CI(nn.Module):
         
         # Define outputdensities
         if outputdensity == 'bernoulli':
-            outputnonlin = torch.sigmoid
+            outputnonlin = nn.Sigmoid()
         elif outputdensity == 'gaussian':
-            outputnonlin = lambda x: x
+            outputnonlin = Identity()
         else:
             ValueError('Unknown output density')
         
         # Define encoder and decoder
         self.encoder1 = encoder(input_shape, latent_dim)
-        self.decoder1 = decoder((self.stn.dim(),), latent_dim, lambda x: x)
+        self.decoder1 = decoder((self.stn.dim(),), latent_dim, Identity())
         
         self.encoder2 = encoder(input_shape, latent_dim)
         self.decoder2 = decoder(input_shape, latent_dim, outputnonlin)
@@ -61,7 +61,7 @@ class VITAE_CI(nn.Module):
         # Encode/decode semantic space
         mu2, var2 = self.encoder2(x_new)
         z2 = self.reparameterize(mu2, var2, 1, 1)
-        x_mean, x_var = self.decode2(z2)
+        x_mean, x_var = self.decoder2(z2)
         
         # "Detransform" output
         x_mean = self.stn(x_mean, theta_mean)
@@ -106,7 +106,7 @@ class VITAE_CI(nn.Module):
         device = next(self.parameters()).device
         with torch.no_grad():
             z1 = torch.randn(n, self.latent_dim, device=device)
-            theta_mean, _ = self.decode1(z1)
+            theta_mean, _ = self.decoder1(z1)
             theta = self.stn.trans_theta(theta_mean.reshape(-1, 2, 3))
             return theta.reshape(-1, 6)
     
@@ -119,32 +119,37 @@ class VITAE_CI(nn.Module):
     #%%
     def callback(self, writer, loader, epoch):
         n = 10      
-        trans = torch.tensor([0,0,0,0,0,0], dtype=torch.float32)
+        trans = torch.tensor(np.zeros(self.stn.dim()), dtype=torch.float32)
         samples = self.sample_only_images(n*n, trans)
         writer.add_image('samples/fixed_trans', make_grid(samples.cpu(), nrow=n),
                          global_step=epoch)
+        del samples
         
-        img = next(iter(loader))[0][0]
+        img = (next(iter(loader))[0][0]).to(torch.float32)
         samples = self.sample_only_trans(n*n, img)
         writer.add_image('samples/fixed_img', make_grid(samples.cpu(), nrow=n),
                           global_step=epoch)
-    
+        del samples
+        
         # Lets log a histogram of the transformation
         theta = self.sample_transformation(1000)
-        for i in range(6):
+        for i in range(theta.shape[1]):
             writer.add_histogram('transformation/a' + str(i), theta[:,i], 
                                  global_step=epoch, bins='auto')
             writer.add_scalar('transformation/mean_a' + str(i), theta[:,i].mean(),
                               global_step=epoch)
         
         # Also to a decomposition of the matrix and log these values
-        values = affine_decompose(theta.view(-1, 2, 3))
-        tags = ['sx', 'sy', 'm', 'theta', 'tx', 'ty']
-        for i in range(6):
-            writer.add_histogram('transformation/' + tags[i], values[i],
-                                 global_step=epoch, bins='auto')
-            writer.add_scalar('transformation/mean_' + tags[i], values[i].mean(),
-                              global_step=epoch)
+        if self.stn.dim() == 6:
+            values = affine_decompose(theta.view(-1, 2, 3))
+            tags = ['sx', 'sy', 'm', 'theta', 'tx', 'ty']
+            for i in range(6):
+                writer.add_histogram('transformation/' + tags[i], values[i],
+                                     global_step=epoch, bins='auto')
+                writer.add_scalar('transformation/mean_' + tags[i], values[i].mean(),
+                                  global_step=epoch)
+            del values
+        del theta
             
         # If 2d latent space we can make a fine meshgrid of sampled points
         if self.latent_dim == 2:
@@ -153,8 +158,9 @@ class VITAE_CI(nn.Module):
             y = np.linspace(-3, 3, 20)
             z = np.stack([array.flatten() for array in np.meshgrid(x,y)], axis=1)
             z = torch.tensor(z, dtype=torch.float32)
-            trans = torch.tensor([0,0,0,0,0,0], dtype=torch.float32).repeat(20*20, 1, 1)
+            trans = torch.tensor(np.zeros(self.stn.dim()), dtype=torch.float32).repeat(20*20, 1)
             x_mean, x_var = self.decoder2(z.to(device))
             out = self.stn(x_mean, trans.to(device))
             writer.add_image('samples/meshgrid', make_grid(out.cpu(), nrow=20),
                              global_step=epoch)
+            del out
