@@ -41,10 +41,16 @@ def vae_loss(x, x_mu, x_var, z, z_mus, z_vars, eq_samples, iw_samples,
     x = x.view(batch_size, 1, 1, -1)
     x_mu = x_mu.view(batch_size, eq_samples, iw_samples, -1)
     x_var = x_var.view(batch_size, eq_samples, iw_samples, -1)
-
+    
+    if z_mus[-1].shape[0] == batch_size:
+        shape = (1,1)
+    else:
+        shape = (eq_samples, iw_samples)
+        
+    
     z = [zs.view(-1, eq_samples, iw_samples, latent_dim) for zs in z]
-    z_mus = [z_mus[0].view(-1, 1, 1, latent_dim)] + [m.view(-1, eq_samples, iw_samples, latent_dim) for m in z_mus[1:]]
-    z_vars = [z_vars[0].view(-1, 1, 1, latent_dim)] + [l.view(-1, eq_samples, iw_samples, latent_dim) for l in z_vars[1:]]
+    z_mus = [z_mus[0].view(-1, 1, 1, latent_dim)] + [m.view(-1, *shape, latent_dim) for m in z_mus[1:]]
+    z_vars = [z_vars[0].view(-1, 1, 1, latent_dim)] + [l.view(-1, *shape, latent_dim) for l in z_vars[1:]]
     
     log_pz = [log_stdnormal(zs) for zs in z]
     log_qz = [log_normal2(zs, m, torch.log(l+eps)) for zs,m,l in zip(z, z_mus, z_vars)]

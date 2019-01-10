@@ -40,9 +40,9 @@ class PERCEPTION(data.Dataset):
         
         # Load file
         if self.train:
-            self.data = torch.tensor(np.load('unsuper/data/PERCEPTION/training_f10.npy'))
+            self.data = torch.tensor(np.load('unsuper/data/PERCEPTION/training.npy'))
         else:
-            self.data = torch.tensor(np.load('unsuper/data/PERCEPTION/testing_f10.npy'))
+            self.data = torch.tensor(np.load('unsuper/data/PERCEPTION/testing.npy'))
         self.targets = torch.zeros(self.data.shape[0])
         
         # Cut of data

@@ -28,7 +28,7 @@ def get_transformer(name):
                     'affinedecomp': ST_AffineDecomp,
                     'cpab': ST_CPAB
                     }
-    assert (name in transformers), 'Encoder not found, choose between: ' \
+    assert (name in transformers), 'Transformer not found, choose between: ' \
             + ', '.join([k for k in transformers.keys()])
     return transformers[name]
 
@@ -44,7 +44,7 @@ class ST_Affine(nn.Module):
             b = theta[:,4:]
             A = torch.inverse(A.view(-1, 2, 2)).reshape(-1, 4)
             b = -b
-            theta = torch.cat((A,b), dim=0)
+            theta = torch.cat((A,b), dim=1)
             
         theta = theta.view(-1, 2, 3)
         output_size = torch.Size([x.shape[0], *self.input_shape])
@@ -59,7 +59,7 @@ class ST_Affine(nn.Module):
         return 6
 
 #%%
-class ST_AffineDecomp:
+class ST_AffineDecomp(nn.Module):
     def __init__(self, input_shape):
         super(ST_AffineDecomp, self).__init__()
         self.input_shape = input_shape
@@ -76,7 +76,6 @@ class ST_AffineDecomp:
         grid = F.affine_grid(theta, output_size)
         x = F.grid_sample(x, grid)
         return x
-        
             
     def trans_theta(self, theta):
         return theta
@@ -108,20 +107,19 @@ class ST_AffineDiff(nn.Module):
 
 #%%
 try:
-    from libcpab.pytorch import cpab
+    from libcpab import cpab
 
     class ST_CPAB(nn.Module):
         def __init__(self, input_shape):
             super(ST_CPAB, self).__init__()
             self.input_shape = input_shape
-            self.cpab = cpab([4,4], 
-                             zero_boundary=False, 
+            self.cpab = cpab([3,4], backend='pytorch', device='gpu',
+                             zero_boundary=True, 
                              volume_perservation=False)
         
         def forward(self, x, theta, inverse=False):
             if inverse:
                 theta = -theta
-            self.cpab.device = x.device # change to the device of the input
             out = self.cpab.transform_data(data = x, 
                                            theta = theta,    
                                            outsize = self.input_shape[1:])

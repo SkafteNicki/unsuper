@@ -173,7 +173,7 @@ class vae_trainer:
                     if (epoch % eval_epoch == 0) or (epoch==n_epochs):
                         progress_bar = tqdm(desc='Calculating log(p(x))', 
                                             total=len(testloader.dataset), unit='samples')
-                        test_loss, test_recon, test_kl = 0, 0, len(kl_terms)*[0]
+                        test_loss, test_recon, test_kl = 0, 0, self.model.latent_spaces*[0]
                         for i, (data, _) in enumerate(testloader):
                             data = data.reshape(-1, *self.input_shape).to(torch.float32).to(self.device)
                             # We need to do this for each individual points, because
@@ -202,7 +202,7 @@ class vae_trainer:
             if testloader: 
                 try:
                     self.save_embeddings(writer, testloader, name='test')
-                except:
+                except Exception as e:
                     print('Did not save embeddings for test set')
                     print(e)
 

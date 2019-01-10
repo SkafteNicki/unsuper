@@ -77,10 +77,10 @@ def construct_affine(params):
     shear = zeros.clone()
     shear[:,0,0] = 1; shear[:,1,1] = 1; shear[:,0,1] = m
     scale = zeros.clone()
-    scale[:,0,0] = sx; scale[:,0,0] = sy
+    scale[:,0,0] = sx; scale[:,1,1] = sy
     A = torch.matmul(torch.matmul(rot, shear), scale)
     b = torch.stack((tx, ty), dim=1)
-    theta = torch.cat((A,b), dim=0)
+    theta = torch.cat((A,b[:,:,None]), dim=2)
     return theta.reshape(n, 6)
     
 #%%

@@ -56,7 +56,7 @@ class VITAE_CI(nn.Module):
         theta_mean, theta_var = self.decoder1(z1)
         
         # Transform input
-        x_new = self.stn(x.repeat(eq_samples*iw_samples, 1, 1, 1), -theta_mean)
+        x_new = self.stn(x.repeat(eq_samples*iw_samples, 1, 1, 1), theta_mean, inverse=True)
         
         # Encode/decode semantic space
         mu2, var2 = self.encoder2(x_new)
@@ -64,8 +64,8 @@ class VITAE_CI(nn.Module):
         x_mean, x_var = self.decoder2(z2)
         
         # "Detransform" output
-        x_mean = self.stn(x_mean, theta_mean)
-        x_var = self.stn(x_var, theta_mean)
+        x_mean = self.stn(x_mean, theta_mean, inverse=False)
+        x_var = self.stn(x_var, theta_mean, inverse=False)
         x_var = switch*x_var + (1-switch)*0.02**2
         
         return x_mean, x_var, [z1, z2], [mu1, mu2], [var1, var2]
