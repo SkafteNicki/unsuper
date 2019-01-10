@@ -10,6 +10,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from .expm import torch_expm
+from .utility import construct_affine
 
 #%%
 def expm(theta): 
@@ -24,6 +25,7 @@ def expm(theta):
 def get_transformer(name):
     transformers = {'affine': ST_Affine,
                     'affinediff': ST_AffineDiff,
+                    'affinedecomp': ST_AffineDecomp,
                     'cpab': ST_CPAB
                     }
     assert (name in transformers), 'Encoder not found, choose between: ' \
@@ -37,6 +39,13 @@ class ST_Affine(nn.Module):
         self.input_shape = input_shape
         
     def forward(self, x, theta, inverse=False):
+        if inverse:
+            A = theta[:,:4]
+            b = theta[:,4:]
+            A = torch.inverse(A.view(-1, 2, 2)).reshape(-1, 4)
+            b = -b
+            theta = torch.cat((A,b), dim=0)
+            
         theta = theta.view(-1, 2, 3)
         output_size = torch.Size([x.shape[0], *self.input_shape])
         grid = F.affine_grid(theta, output_size)
@@ -48,7 +57,33 @@ class ST_Affine(nn.Module):
     
     def dim(self):
         return 6
+
+#%%
+class ST_AffineDecomp:
+    def __init__(self, input_shape):
+        super(ST_AffineDecomp, self).__init__()
+        self.input_shape = input_shape
+        
+    def forward(self, x, theta, inverse=False):
+        # theta = [sx, sy, angle, shear, tx, ty]
+        if inverse:
+            theta[:,:2] = 1/theta[:,:2]
+            theta[:,2:] = -theta[:,2:]
+            
+        theta = construct_affine(theta)
+        theta = theta.view(-1, 2, 3)
+        output_size = torch.Size([x.shape[0], *self.input_shape])
+        grid = F.affine_grid(theta, output_size)
+        x = F.grid_sample(x, grid)
+        return x
+        
+            
+    def trans_theta(self, theta):
+        return theta
     
+    def dim(self):
+        return 6
+
 #%%
 class ST_AffineDiff(nn.Module):
     def __init__(self, input_shape):
@@ -56,6 +91,8 @@ class ST_AffineDiff(nn.Module):
         self.input_shape = input_shape
         
     def forward(self, x, theta, inverse=False):
+        if inverse:
+            theta = -theta
         theta = theta.view(-1, 2, 3)
         theta = expm(theta)
         output_size = torch.Size([x.shape[0], *self.input_shape])
@@ -82,6 +119,8 @@ try:
                              volume_perservation=False)
         
         def forward(self, x, theta, inverse=False):
+            if inverse:
+                theta = -theta
             self.cpab.device = x.device # change to the device of the input
             out = self.cpab.transform_data(data = x, 
                                            theta = theta,    
@@ -93,8 +132,9 @@ try:
         
         def dim(self):
             return self.cpab.get_theta_dim()
-except:
-    pass
+except Exception as e:
+    print('Could not import libcpab, error was')
+    print(e)
 
 #%%
 if __name__ == '__main__':

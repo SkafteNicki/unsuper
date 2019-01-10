@@ -51,5 +51,23 @@ def affine_decompose(A):
     return sx, sy, m, theta, tx, ty
 
 #%%
+def construct_affine(params):
+    device = params.device
+    n = params.shape[0]
+    sx, sy, angle = params[:,0], params[:,1], params[:,2]
+    m, tx, ty = params[:,3], params[:,4], params[:,5]
+    zeros = torch.zeros(n, 2, 2, device=device)
+    rot = torch.stack((torch.stack((angle.cos(), -angle.sin()), dim=1), 
+                       torch.stack((angle.sin(), angle.cos()), dim=1)), dim=1)
+    shear = zeros.clone()
+    shear[:,0,0] = 1; shear[:,1,1] = 1; shear[:,0,1] = m
+    scale = zeros.clone()
+    scale[:,0,0] = sx; scale[:,0,0] = sy
+    A = torch.matmul(torch.matmul(rot, shear), scale)
+    b = torch.stack((tx, ty), dim=1)
+    theta = torch.cat((A,b), dim=0)
+    return theta.reshape(n, 6)
+    
+#%%
 if __name__ == '__main__':
     pass
