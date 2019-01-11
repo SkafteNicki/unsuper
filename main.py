@@ -46,7 +46,7 @@ def argparser():
     # Dataset settings
     ds = parser.add_argument_group('Dataset settings')
     ds.add_argument('--classes','--list', type=int, nargs='+', default=[0,1,2,3,4,5,6,7,8,9], help='classes to train on')
-    ds.add_argument('--num_points', type=int, default=1000, help='number of points in each class')
+    ds.add_argument('--num_points', type=int, default=10000, help='number of points in each class')
     ds.add_argument('--logdir', type=str, default='res', help='where to store results')
     ds.add_argument('--dataset', type=str, default='mnist', help='dataset to use')
     
@@ -78,6 +78,7 @@ if __name__ == '__main__':
                                                     classes=args.classes,
                                                     num_points=args.num_points,
                                                     batch_size=args.batch_size)
+        img_size = (1, 28, 28)
     elif args.dataset == 'perception':
         trainloader, testloader = perception_data_loader(root='unsuper/data', 
                                                          transform=None,
@@ -86,10 +87,7 @@ if __name__ == '__main__':
                                                          num_points=args.num_points,
                                                          batch_size=args.batch_size)
         testloader=None
-
-    
-    # Get size of imput
-    img_size = tuple([*next(iter(trainloader))[0].shape[1:]])
+        img_size = (1, 428, 214)
 
     # Construct model
     model_class = get_model(args.model)

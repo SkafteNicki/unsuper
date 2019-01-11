@@ -113,7 +113,7 @@ try:
         def __init__(self, input_shape):
             super(ST_CPAB, self).__init__()
             self.input_shape = input_shape
-            self.cpab = cpab([3,4], backend='pytorch', device='gpu',
+            self.cpab = cpab([2,4], backend='pytorch', device='gpu',
                              zero_boundary=True, 
                              volume_perservation=False)
         

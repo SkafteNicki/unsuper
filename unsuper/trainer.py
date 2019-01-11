@@ -130,6 +130,7 @@ class vae_trainer:
             with torch.no_grad():
                 n = 10
                 data_train = next(iter(trainloader))[0].to(torch.float32).to(self.device)[:n]
+                data_train = data.reshape(-1, *self.input_shape)
                 recon_data_train = self.model(data_train)[0]
                 writer.add_image('train/recon', make_grid(torch.cat([data_train, 
                              recon_data_train]).cpu(), nrow=n), global_step=epoch)
