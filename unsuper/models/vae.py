@@ -58,6 +58,14 @@ class VAE(nn.Module):
             return x_mu
     
     #%%
+    def semantics(self, x, eq_samples=1, iw_samples=1, switch=1.0):
+        z_mu, z_var = self.encoder(x)
+        z = self.reparameterize(z_mu, z_var, eq_samples, iw_samples)
+        x_mu, x_var = self.decoder(z)
+        x_var = switch*x_var + (1-switch)*(1**2)
+        return x_mu, x_var, [z], [z_mu], [z_var]
+    
+    #%%
     def latent_representation(self, x):
         z_mu, z_var = self.encoder(x)
         return [z_mu]
