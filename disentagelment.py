@@ -9,6 +9,7 @@ Created on Mon Jan 14 06:53:55 2019
 import torch
 import argparse, datetime
 from torchvision import transforms
+import numpy as np
 
 from unsuper.trainer import vae_trainer
 from unsuper.data.mnist_data_loader import mnist_data_loader
@@ -118,7 +119,7 @@ if __name__ == '__main__':
     torch.save(model.state_dict(), logdir + '/trained_model.pt')
     
     #%%
-    if args.dataset == 'mnist'    
+    if args.dataset == 'mnist':
         Xtrain = np.zeros((60000, 784))
         Ytrain = np.zeros((60000,))
         Xtest = np.zeros((10000, 784))
@@ -128,24 +129,22 @@ if __name__ == '__main__':
         for i, (data, labels) in enumerate(trainloader):
             # Feed forward data
             data = data.reshape(-1, *Trainer.input_shape).to(torch.float32).to(Trainer.device)
-            switch = 1.0 if epoch > warmup else 0.0
-            out = Trainer.model.semantics(data, 1.0, 1.0, 1.0)
+            out = Trainer.model.semantics(data, 1, 1, 1.0)
             
             n = data.shape[0]
-            Xtrain[counter:counter+n] = out[0].cpu()
-            Ytrain[counter:counter+n] = labels
+            Xtrain[counter:counter+n] = out[0].detach().cpu().numpy().reshape(n, -1)
+            Ytrain[counter:counter+n] = labels.numpy()
             counter += n
             
         counter = 0
         for i, (data, labels) in enumerate(testloader):
             # Feed forward data
             data = data.reshape(-1, *Trainer.input_shape).to(torch.float32).to(Trainer.device)
-            switch = 1.0 if epoch > warmup else 0.0
-            out = Trainer.model.semantics(data, 1.0, 1.0, 1.0)
+            out = Trainer.model.semantics(data, 1, 1, 1.0)
             
             n = data.shape[0]
-            Xtest[counter:counter+n] = out[0].cpu()
-            Ytest[counter:counter+n] = labels
+            Xtest[counter:counter+n] = out[0].detach().cpu().numpy().reshape(n, -1)
+            Ytest[counter:counter+n] = labels.numpy()
             counter += n
         
     else:
