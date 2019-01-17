@@ -111,6 +111,17 @@ class VITAE_CI(nn.Module):
             return theta.reshape(-1, 6)
     
     #%%
+    def semantics(self, x, eq_samples=1, iw_samples=1, switch=1.0):
+        mu1, var1 = self.encoder1(x)
+        z1 = self.reparameterize(mu1, var1, eq_samples, iw_samples)
+        theta_mean, theta_var = self.decoder1(z1)
+        x_new = self.stn(x.repeat(eq_samples*iw_samples, 1, 1, 1), theta_mean, inverse=True)
+        mu2, var2 = self.encoder2(x_new)
+        z2 = self.reparameterize(mu2, var2, 1, 1)
+        x_mean, x_var = self.decoder2(z2)
+        return x_mean, x_var, [z1, z2], [mu1, mu2], [var1, var2]
+    
+    #%%
     def latent_representation(self, x):
         z_mu1, _ = self.encoder1(x)
         z_mu2, _ = self.encoder2(x)

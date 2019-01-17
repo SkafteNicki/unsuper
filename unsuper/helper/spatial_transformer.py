@@ -22,17 +22,6 @@ def expm(theta):
     return theta 
 
 #%%
-def get_transformer(name):
-    transformers = {'affine': ST_Affine,
-                    'affinediff': ST_AffineDiff,
-                    'affinedecomp': ST_AffineDecomp,
-                    'cpab': ST_CPAB
-                    }
-    assert (name in transformers), 'Transformer not found, choose between: ' \
-            + ', '.join([k for k in transformers.keys()])
-    return transformers[name]
-
-#%%
 class ST_Affine(nn.Module):
     def __init__(self, input_shape):
         super(ST_Affine, self).__init__()
@@ -133,6 +122,26 @@ try:
 except Exception as e:
     print('Could not import libcpab, error was')
     print(e)
+    class ST_CPAB(nn.Module):
+        def __init__(self, input_shape):
+            super(ST_CPAB, self).__init__()
+            self.input_shape = input_shape
+            
+        def forward(self, x, theta, inverse=False):
+            raise ValueError('''libcpab was not correctly initialized, so you 
+                             cannot run with --stn_type cpab''')
+    
+#%%
+def get_transformer(name):
+    transformers = {'affine': ST_Affine,
+                    'affinediff': ST_AffineDiff,
+                    'affinedecomp': ST_AffineDecomp,
+                    'cpab': ST_CPAB
+                    }
+    assert (name in transformers), 'Transformer not found, choose between: ' \
+            + ', '.join([k for k in transformers.keys()])
+    return transformers[name]
+
 
 #%%
 if __name__ == '__main__':
