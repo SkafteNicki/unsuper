@@ -86,8 +86,7 @@ if __name__ == '__main__':
                                                          classes=args.classes,
                                                          num_points=args.num_points,
                                                          batch_size=args.batch_size)
-        testloader=None
-        img_size = (1, 428, 214)
+        img_size = (1, 400, 200)
 
     # Construct model
     model_class = get_model(args.model)

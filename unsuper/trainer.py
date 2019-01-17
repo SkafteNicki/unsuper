@@ -161,6 +161,7 @@ class vae_trainer:
                         writer.add_scalar('test/KL_loss' + str(j), kl_loss, iteration)
             
                     data_test = next(iter(testloader))[0].to(torch.float32).to(self.device)[:n]
+                    data_test = data_test.reshape(-1, *self.input_shape)
                     recon_data_test = self.model(data_test)[0]
                     writer.add_image('test/recon', make_grid(torch.cat([data_test, 
                              recon_data_test]).cpu(), nrow=n), global_step=epoch)
