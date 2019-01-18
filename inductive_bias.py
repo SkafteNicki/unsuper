@@ -82,7 +82,7 @@ if __name__ == '__main__':
     # Construct model
     model_class = get_model('vitae_ci')
     model = model_class(input_shape = img_size,
-                        latent_dim = args.latent_dim, 
+                        latent_dim = 2, 
                         encoder = get_encoder(args.ed_type), 
                         decoder = get_decoder(args.ed_type), 
                         outputdensity = args.density,
@@ -111,32 +111,29 @@ if __name__ == '__main__':
     #%% build new dataset
     class sample_data(torch.utils.data.Dataset):
         def __init__(self, n):
+            self.n = n
             X=np.zeros((n, 1, 28, 28))
             y=np.zeros((n, ))
             self.latent = [np.zeros((n, 2)) for _ in range(model.latent_spaces)]
             for b in range(int(n/100)):
                 x, zs = model.special_sample(100)
-                X[100*b:100*(b+1)] = x
+                X[100*b:100*(b+1)] = x.cpu()
                 for i in range(model.latent_spaces):
-                    self.latent[i][100*b:100*(b+1)] = zs[i]
+                    self.latent[i][100*b:100*(b+1)] = zs[i].cpu()
             self.data = torch.tensor(X)
             self.targets = torch.tensor(y)
             
         def __getitem__(self, index):
             img, target = self.data[index], int(self.targets[index])
-
-            if self.transform is not None:
-                img = self.transform(img)
-    
-            if self.target_transform is not None:
-                target = self.target_transform(target)
-    
             return img, target
+
+        def __len__(self):
+            return self.n
                 
     train = sample_data(10000)
     test = sample_data(1000)
-    trainloader = torch.utils.data.DataLoader(train, args.batch_size, )
-    testloader = torch.utils.data.DataLoader(test, args.batch_size, )
+    trainloader = torch.utils.data.DataLoader(train, batch_size = 500)
+    testloader = torch.utils.data.DataLoader(test, batch_size = 500)
     
     #%% train second model
     # Logdir for results
@@ -147,7 +144,7 @@ if __name__ == '__main__':
 
     # Construct model
     model_class2 = get_model(args.model)
-    model2 = model_class(input_shape = img_size,
+    model2 = model_class2(input_shape = img_size,
                         latent_dim = args.latent_dim, 
                         encoder = get_encoder(args.ed_type), 
                         decoder = get_decoder(args.ed_type), 
@@ -175,16 +172,29 @@ if __name__ == '__main__':
     torch.save(model2.state_dict(), logdir + '/trained_model2.pt')
     
     #%% save latent codes
-    latent1 = [np.zeros((10000, 2)) for _ in range(model2.latent_spaces)]
-    latent2 = [np.zeros((1000, 2)) for _ in range(model2.latent_spaces)]
-    for i in range(100):
-        _, _, _, zs_tr, _ = model2.semantics(trainloader.dataset.data[100*i:100*(i+1)])
-        zs_te = model2.semantics(testloader.dataset.data[10*i:10*(i+1)])
+    latent1 = [np.zeros((10000, args.latent_dim)) for _ in range(model2.latent_spaces)]
+    latent2 = [np.zeros((1000, args.latent_dim)) for _ in range(model2.latent_spaces)]
+    
+    counter = 0
+    for (X, _) in trainloader:
+        X = X.reshape(-1, 1, 28, 28).to(torch.float32).to(Trainer2.device)
+        _, _, _, zs_tr, _ = model2.semantics(X)
+        n = X.shape[0]
         for j in range(model2.latent_spaces):
-            latent1[j][100*i:100*(i+1)] = zs_tr[j]
-            latent2[j][10*i:10*(j+1)] = zs_te[j]
+            latent1[j][counter:counter+n] = zs_tr[j].detach().cpu()
+        counter += n
+
+    counter = 0
+    for (X, _) in testloader:
+        X = X.reshape(-1, 1, 28, 28).to(torch.float32).to(Trainer2.device)
+        _, _, _, zs_tr, _ = model2.semantics(X)
+        n = X.shape[0]
+        for j in range(model2.latent_spaces):
+            latent2[j][counter:counter+n] = zs_tr[j].detach().cpu()
+        counter += n
+
             
-    np.save(logdir + '/latent1', [trainloader.latent, testloader.latent])
+    np.save(logdir + '/latent1', [train.latent, test.latent])
     np.save(logdir + '/latent2', [latent1, latent2])
     
     
