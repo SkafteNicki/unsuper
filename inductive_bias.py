@@ -27,6 +27,7 @@ def argparser():
     ms.add_argument('--model', type=str, default='vae', help='model to train')
     ms.add_argument('--ed_type', type=str, default='mlp', help='encoder/decoder type')
     ms.add_argument('--stn_type', type=str, default='affinediff', help='transformation type to use')
+    ms.add_argument('--beta', type=float, default=1.0, help='beta value for beta-vae model')
     
     # Training settings
     ts = parser.add_argument_group('Training settings')
@@ -60,10 +61,7 @@ if __name__ == '__main__':
     args = argparser()
     
     # Logdir for results
-    if args.logdir == '':
-        logdir = 'res/' + args.model + '/' + datetime.datetime.now().strftime('%Y_%m_%d_%H_%M')
-    else:
-        logdir = 'res/' + args.model + '/' + args.logdir
+    logdir = 'res/disentanglement'
     
     # Load data
     print('Loading data')
@@ -103,6 +101,7 @@ if __name__ == '__main__':
                 testloader=testloader,
                 eq_samples=args.eq_samples, 
                 iw_samples=args.iw_samples, 
+                beta=args.beta,
                 eval_epoch=args.eval_epoch)
     
     # Save model
@@ -130,72 +129,97 @@ if __name__ == '__main__':
         def __len__(self):
             return self.n
                 
-    train = sample_data(10000)
-    test = sample_data(1000)
-    trainloader = torch.utils.data.DataLoader(train, batch_size = 500)
-    testloader = torch.utils.data.DataLoader(test, batch_size = 500)
+    train = sample_data(60000)
+    #test = sample_data(10000)
+    trainloader = torch.utils.data.DataLoader(train, batch_size = args.batch_size)
+    #testloader = torch.utils.data.DataLoader(test, batch_size = 500)
     
-    #%% train second model
-    # Logdir for results
-    if args.logdir == '':
-        logdir = 'res/' + args.model + '/' + datetime.datetime.now().strftime('%Y_%m_%d_%H_%M')
-    else:
-        logdir = 'res/' + args.model + '/' + args.logdir
-
-    # Construct model
-    model_class2 = get_model(args.model)
+    #%% train other models
+    # Construct vae
+    model_class2 = get_model('vae')
     model2 = model_class2(input_shape = img_size,
-                        latent_dim = args.latent_dim, 
-                        encoder = get_encoder(args.ed_type), 
-                        decoder = get_decoder(args.ed_type), 
-                        outputdensity = args.density,
-                        ST_type = args.stn_type)
-    
-    # Summary of model
-    #model_summary(model)
-    
-    # Optimizer
+                          latent_dim = args.latent_dim, 
+                          encoder = get_encoder(args.ed_type), 
+                          decoder = get_decoder(args.ed_type), 
+                          outputdensity = args.density,
+                          ST_type = args.stn_type)
     optimizer2 = torch.optim.Adam(model2.parameters(), lr=args.lr)
-    
-    # Train model
     Trainer2 = vae_trainer(img_size, model2, optimizer2)
     Trainer2.fit(trainloader=trainloader, 
                  n_epochs=args.n_epochs, 
                  warmup=args.warmup, 
                  logdir=logdir,
-                 testloader=testloader,
+                 testloader=None,
                  eq_samples=args.eq_samples, 
-                 iw_samples=args.iw_samples, 
+                 iw_samples=args.iw_samples,
+                 beta=1.0,
                  eval_epoch=args.eval_epoch)
-    
-    # Save model
     torch.save(model2.state_dict(), logdir + '/trained_model2.pt')
     
+    # Construct beta-vae
+    model_class3 = get_model('vae')
+    model3 = model_class3(input_shape = img_size,
+                          latent_dim = args.latent_dim, 
+                          encoder = get_encoder(args.ed_type), 
+                          decoder = get_decoder(args.ed_type), 
+                          outputdensity = args.density,
+                          ST_type = args.stn_type)
+    optimizer3 = torch.optim.Adam(model3.parameters(), lr=args.lr)
+    Trainer3 = vae_trainer(img_size, model3, optimizer3)
+    Trainer3.fit(trainloader=trainloader, 
+                 n_epochs=args.n_epochs, 
+                 warmup=args.warmup, 
+                 logdir=logdir,
+                 testloader=None,
+                 eq_samples=args.eq_samples, 
+                 iw_samples=args.iw_samples,
+                 beta=4.0,
+                 eval_epoch=args.eval_epoch)
+    torch.save(model3.state_dict(), logdir + '/trained_model3.pt')
+    
+    # Construct vitae (again)
+    model_class4 = get_model('vae')
+    model4 = model_class4(input_shape = img_size,
+                          latent_dim = args.latent_dim, 
+                          encoder = get_encoder(args.ed_type), 
+                          decoder = get_decoder(args.ed_type), 
+                          outputdensity = args.density,
+                          ST_type = args.stn_type)
+    optimizer4 = torch.optim.Adam(model3.parameters(), lr=args.lr)
+    Trainer4 = vae_trainer(img_size, model4, optimizer4)
+    Trainer4.fit(trainloader=trainloader, 
+                 n_epochs=args.n_epochs, 
+                 warmup=args.warmup, 
+                 logdir=logdir,
+                 testloader=None,
+                 eq_samples=args.eq_samples, 
+                 iw_samples=args.iw_samples,
+                 beta=1.0,
+                 eval_epoch=args.eval_epoch)
+    torch.save(model4.state_dict(), logdir + '/trained_model4.pt')
+    
     #%% save latent codes
-    latent1 = [np.zeros((10000, args.latent_dim)) for _ in range(model2.latent_spaces)]
-    latent2 = [np.zeros((1000, args.latent_dim)) for _ in range(model2.latent_spaces)]
+    latent1 = train.latent
+    latent2 = [np.zeros((60000, 4))]
+    latent3 = [np.zeros((60000, 4))]
+    latent4 = [np.zeros((60000, 2)), np.zeros((60000, 2))]
     
     counter = 0
     for (X, _) in trainloader:
         X = X.reshape(-1, 1, 28, 28).to(torch.float32).to(Trainer2.device)
-        _, _, _, zs_tr, _ = model2.semantics(X)
+        _, _, _, zs2, _ = model2.semantics(X)
+        _, _, _, zs3, _ = model3.semantics(X)
+        _, _, _, zs4, _ = model4.semantics(X)
         n = X.shape[0]
-        for j in range(model2.latent_spaces):
-            latent1[j][counter:counter+n] = zs_tr[j].detach().cpu()
+        latent2[0][counter:counter+n] = zs2[0].detach().cpu()
+        latent3[0][counter:counter+n] = zs3[0].detach().cpu()
+        latent4[0][counter:counter+n] = zs4[0].detach().cpu()
+        latent4[1][counter:counter+n] = zs4[1].detach().cpu()
         counter += n
 
-    counter = 0
-    for (X, _) in testloader:
-        X = X.reshape(-1, 1, 28, 28).to(torch.float32).to(Trainer2.device)
-        _, _, _, zs_tr, _ = model2.semantics(X)
-        n = X.shape[0]
-        for j in range(model2.latent_spaces):
-            latent2[j][counter:counter+n] = zs_tr[j].detach().cpu()
-        counter += n
-
-            
-    np.save(logdir + '/latent1', [train.latent, test.latent])
-    np.save(logdir + '/latent2', [latent1, latent2])
-    
+    np.save(logdir + '/latent1', latent1)
+    np.save(logdir + '/latent2', latent2)
+    np.save(logdir + '/latent3', latent3)
+    np.save(logdir + '/latent4', latent4)    
     
     

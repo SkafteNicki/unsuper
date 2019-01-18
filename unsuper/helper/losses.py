@@ -14,7 +14,7 @@ c = - 0.5 * math.log(2*math.pi)
 
 #%%
 def vae_loss(x, x_mu, x_var, z, z_mus, z_vars, eq_samples, iw_samples, 
-             latent_dim, epoch, warmup, outputdensity):
+             latent_dim, epoch, warmup, beta, outputdensity):
     """ Calculates the ELBO for a variational autoencoder
     Arguments:
         x: input data [batch_size, *input_dim]
@@ -35,7 +35,7 @@ def vae_loss(x, x_mu, x_var, z, z_mus, z_vars, eq_samples, iw_samples,
         kl_term: kl terms (multiple if multiple latents) in the ELBO term
     """
     eps = 1e-5 # to control underflow in variance estimates
-    weight =  kl_scaling(epoch, warmup)
+    weight =  kl_scaling(epoch, warmup) * beta
     
     batch_size = x.shape[0]
     x = x.view(batch_size, 1, 1, -1)

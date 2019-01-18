@@ -27,6 +27,7 @@ def argparser():
     ms.add_argument('--model', type=str, default='vae', help='model to train')
     ms.add_argument('--ed_type', type=str, default='mlp', help='encoder/decoder type')
     ms.add_argument('--stn_type', type=str, default='affinediff', help='transformation type to use')
+    ms.add_argument('--beta', type=float, default=1.0, help='beta value for beta-vae model')
     
     # Training settings
     ts = parser.add_argument_group('Training settings')

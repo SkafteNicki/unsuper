@@ -44,7 +44,7 @@ class vae_trainer:
     
     #%%
     def fit(self, trainloader, n_epochs=10, warmup=1, logdir='',
-            testloader=None, eq_samples=1, iw_samples=1, eval_epoch=10000):
+            testloader=None, eq_samples=1, iw_samples=1, beta=1.0, eval_epoch=10000):
         """ Fits the supplied model to a training set 
         Arguments:
             trainloader: dataloader (of type torch.utils.data.DataLoader) that
@@ -100,7 +100,7 @@ class vae_trainer:
                 loss, recon_term, kl_terms = vae_loss(data, *out, 
                                                       eq_samples, iw_samples, 
                                                       self.model.latent_dim, 
-                                                      epoch, warmup, 
+                                                      epoch, warmup, beta,
                                                       self.outputdensity)
                 train_loss += float(loss.item())
                 
@@ -131,6 +131,7 @@ class vae_trainer:
                 n = 10
                 data_train = next(iter(trainloader))[0].to(torch.float32).to(self.device)[:n]
                 data_train = data.reshape(-1, *self.input_shape)
+                print(data_train.shape)
                 recon_data_train = self.model(data_train)[0]
                 writer.add_image('train/recon', make_grid(torch.cat([data_train, 
                              recon_data_train]).cpu(), nrow=n), global_step=epoch)
@@ -149,7 +150,7 @@ class vae_trainer:
                         out = self.model(data, 1, 1)    
                         loss, recon_term, kl_terms = vae_loss(data, *out, 1, 1, 
                                                               self.model.latent_dim, 
-                                                              epoch, warmup, 
+                                                              epoch, warmup, beta,
                                                               self.outputdensity)
                         test_loss += loss.item()
                         test_recon += recon_term.item()
@@ -184,7 +185,7 @@ class vae_trainer:
                                 out = self.model(d[None], 1, 1000)
                                 loss, _, _ = vae_loss(d, *out, 1, 1000  ,
                                                       self.model.latent_dim, 
-                                                      epoch, warmup, 
+                                                      epoch, warmup, beta,
                                                       self.outputdensity)
                                 test_loss += loss.item()
                                 progress_bar.update()

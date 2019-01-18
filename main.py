@@ -24,9 +24,10 @@ def argparser():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     # Model settings
     ms = parser.add_argument_group('Model settings')
-    ms.add_argument('--model', type=str, default='vitae_ci', help='model to train')
+    ms.add_argument('--model', type=str, default='vae', help='model to train')
     ms.add_argument('--ed_type', type=str, default='mlp', help='encoder/decoder type')
     ms.add_argument('--stn_type', type=str, default='affinediff', help='transformation type to use')
+    ms.add_argument('--beta', type=float, default=16.0, help='beta value for beta-vae model')
     
     # Training settings
     ts = parser.add_argument_group('Training settings')
@@ -47,7 +48,7 @@ def argparser():
     ds = parser.add_argument_group('Dataset settings')
     ds.add_argument('--classes','--list', type=int, nargs='+', default=[0,1,2,3,4,5,6,7,8,9], help='classes to train on')
     ds.add_argument('--num_points', type=int, default=10000, help='number of points in each class')
-    ds.add_argument('--logdir', type=str, default='test_final2', help='where to store results')
+    ds.add_argument('--logdir', type=str, default='beta_test16', help='where to store results')
     ds.add_argument('--dataset', type=str, default='mnist', help='dataset to use')
     
     # Parse and return
@@ -111,7 +112,8 @@ if __name__ == '__main__':
                 logdir=logdir,
                 testloader=testloader,
                 eq_samples=args.eq_samples, 
-                iw_samples=args.iw_samples, 
+                iw_samples=args.iw_samples,
+                beta=args.beta,
                 eval_epoch=args.eval_epoch)
     
     # Save model
