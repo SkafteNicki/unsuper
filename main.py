@@ -24,17 +24,17 @@ def argparser():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     # Model settings
     ms = parser.add_argument_group('Model settings')
-    ms.add_argument('--model', type=str, default='vae', help='model to train')
+    ms.add_argument('--model', type=str, default='vitae_ci', help='model to train')
     ms.add_argument('--ed_type', type=str, default='mlp', help='encoder/decoder type')
     ms.add_argument('--stn_type', type=str, default='affinediff', help='transformation type to use')
     
     # Training settings
     ts = parser.add_argument_group('Training settings')
-    ts.add_argument('--n_epochs', type=int, default=500, help='number of epochs of training')
+    ts.add_argument('--n_epochs', type=int, default=100, help='number of epochs of training')
     ts.add_argument('--eval_epoch', type=int, default=1000, help='when to evaluate log(p(x))')
-    ts.add_argument('--batch_size', type=int, default=256, help='size of the batches')
-    ts.add_argument('--warmup', type=int, default=250, help='number of warmup epochs for kl-terms')
-    ts.add_argument('--lr', type=float, default=1e-4, help='learning rate for adam optimizer')
+    ts.add_argument('--batch_size', type=int, default=512, help='size of the batches')
+    ts.add_argument('--warmup', type=int, default=50, help='number of warmup epochs for kl-terms')
+    ts.add_argument('--lr', type=float, default=1e-3, help='learning rate for adam optimizer')
     
     # Hyper settings
     hp = parser.add_argument_group('Variational settings')
@@ -45,9 +45,9 @@ def argparser():
     
     # Dataset settings
     ds = parser.add_argument_group('Dataset settings')
-    ds.add_argument('--classes','--list', type=int, nargs='+', default=[0,1], help='classes to train on')
-    ds.add_argument('--num_points', type=int, default=2000, help='number of points in each class')
-    ds.add_argument('--logdir', type=str, default='vis_res7', help='where to store results')
+    ds.add_argument('--classes','--list', type=int, nargs='+', default=[0,1,2,3,4,5,6,7,8,9], help='classes to train on')
+    ds.add_argument('--num_points', type=int, default=10000, help='number of points in each class')
+    ds.add_argument('--logdir', type=str, default='test_final2', help='where to store results')
     ds.add_argument('--dataset', type=str, default='mnist', help='dataset to use')
     
     # Parse and return

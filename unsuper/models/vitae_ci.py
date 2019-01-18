@@ -175,15 +175,25 @@ class VITAE_CI(nn.Module):
         del theta
             
         # If 2d latent space we can make a fine meshgrid of sampled points
-#        if self.latent_dim == 2:
-#            device = next(self.parameters()).device
-#            x = np.linspace(-3, 3, 20)
-#            y = np.linspace(-3, 3, 20)
-#            z = np.stack([array.flatten() for array in np.meshgrid(x,y)], axis=1)
-#            z = torch.tensor(z, dtype=torch.float32)
-#            trans = torch.tensor(np.zeros(self.stn.dim()), dtype=torch.float32).repeat(20*20, 1)
-#            x_mean, x_var = self.decoder2(z.to(device))
-#            out = self.stn(x_mean, trans.to(device))
-#            writer.add_image('samples/meshgrid', make_grid(out.cpu(), nrow=20),
-#                             global_step=epoch)
-#            del out
+        if self.latent_dim == 2:
+            device = next(self.parameters()).device
+            x = np.linspace(-3, 3, 20)
+            y = np.linspace(-3, 3, 20)
+            z = np.stack([array.flatten() for array in np.meshgrid(x,y)], axis=1)
+            z = torch.tensor(z, dtype=torch.float32)
+            trans = torch.tensor(np.zeros(self.stn.dim()), dtype=torch.float32).repeat(20*20, 1)
+            x_mean, x_var = self.decoder2(z.to(device))
+            out = self.stn(x_mean, trans.to(device))
+            writer.add_image('samples/meshgrid_fixed_trans', make_grid(out.cpu(), nrow=20),
+                             global_step=epoch)
+            del out
+            
+            x = np.linspace(-3, 3, 20)
+            y = np.linspace(-3, 3, 20)
+            z = np.stack([array.flatten() for array in np.meshgrid(x,y)], axis=1)
+            z = torch.tensor(z, dtype=torch.float32)
+            theta_mean, theta_var = self.decoder1(z.to(device))
+            out = self.stn(img.repeat(20*20, 1, 1, 1).to(device), theta_mean)
+            writer.add_image('samples/meshgrid_fixed_img', make_grid(out.cpu(), nrow=20),
+                             global_step=epoch)
+            del out
