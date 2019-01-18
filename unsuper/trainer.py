@@ -129,9 +129,8 @@ class vae_trainer:
             # Log for the training set
             with torch.no_grad():
                 n = 10
-                data_train = next(iter(trainloader))[0].to(torch.float32).to(self.device)[:n]
-                data_train = data.reshape(-1, *self.input_shape)
-                print(data_train.shape)
+                data_train = next(iter(trainloader))[0].to(torch.float32).to(self.device)
+                data_train = data[:n].reshape(-1, *self.input_shape)
                 recon_data_train = self.model(data_train)[0]
                 writer.add_image('train/recon', make_grid(torch.cat([data_train, 
                              recon_data_train]).cpu(), nrow=n), global_step=epoch)
@@ -166,6 +165,8 @@ class vae_trainer:
                     recon_data_test = self.model(data_test)[0]
                     writer.add_image('test/recon', make_grid(torch.cat([data_test, 
                              recon_data_test]).cpu(), nrow=n), global_step=epoch)
+                    if (epoch==n_epochs):
+                        print('Final test loss', test_loss.item())
                     del data, out, loss, recon_term, kl_terms, data_test, recon_data_test
 
                     # Callback, if a model have something special to log
