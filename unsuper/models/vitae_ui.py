@@ -77,6 +77,17 @@ class VITAE_UI(nn.Module):
             x_mean, _ = self.decoder2(z2)
             out_mean = self.stn(x_mean, theta_mean)
             return out_mean
+        
+    #%%
+    def special_sample(self, n):
+        device = next(self.parameters()).device
+        with torch.no_grad():
+            z1 = torch.randn(n, self.latent_dim, device=device)
+            z2 = torch.randn(n, self.latent_dim, device=device)
+            theta_mean, _ = self.decoder1(z1)
+            x_mean, _ = self.decoder2(z2)
+            out_mean = self.stn(x_mean, theta_mean)
+            return out_mean, [z1, z2]
 
     #%%
     def sample_only_trans(self, n, img):

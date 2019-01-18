@@ -54,7 +54,24 @@ class Identity(nn.Module):
 
     def forward(self, x):
         return x
+
+#%%
+class Flatten(nn.Module):
+    def __init__(self):
+        super(Flatten, self).__init__()
     
+    def forward(self, input):
+        return input.view(input.size(0), -1)   
+
+#%%
+class BatchReshape(nn.Module):
+    def __init__(self, shape):
+        super(BatchReshape, self).__init__()
+        self.shape = shape
+
+    def forward(self, x):
+        return x.view(-1, *self.shape)
+
 #%%
 def affine_decompose(A):
     sx = (A[:,0,0].pow(2) + A[:,1,0].pow(2)).sqrt()
