@@ -166,7 +166,7 @@ class vae_trainer:
                     writer.add_image('test/recon', make_grid(torch.cat([data_test, 
                              recon_data_test]).cpu(), nrow=n), global_step=epoch)
                     if (epoch==n_epochs):
-                        print('Final test loss', test_loss.item())
+                        print('Final test loss', test_loss)
                     del data, out, loss, recon_term, kl_terms, data_test, recon_data_test
 
                     # Callback, if a model have something special to log
