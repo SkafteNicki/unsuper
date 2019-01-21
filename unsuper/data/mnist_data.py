@@ -3,7 +3,6 @@
 """
 Created on Fri Oct  5 09:31:42 2018
 
-@author: nsde
 """
 #%%
 from __future__ import print_function

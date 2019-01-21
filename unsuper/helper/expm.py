@@ -2,7 +2,6 @@
 """
 Created on Tue Oct  9 06:41:30 2018
 
-@author: nsde
 """
 #%%
 import torch

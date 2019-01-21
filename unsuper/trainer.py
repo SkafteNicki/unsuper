@@ -3,7 +3,6 @@
 """
 Created on Fri Oct 12 12:18:45 2018
 
-@author: nsde
 """
 #%%
 import torch

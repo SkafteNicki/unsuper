@@ -2,7 +2,6 @@
 """
 Created on Mon Oct 15 12:16:57 2018
 
-@author: Nicki
 """
 #%%
 import torch

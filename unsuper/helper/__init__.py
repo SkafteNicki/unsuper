@@ -3,7 +3,6 @@
 """
 Created on Tue Sep 18 12:54:37 2018
 
-@author: nsde
 """
 
 from . import utility

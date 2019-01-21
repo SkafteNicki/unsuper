@@ -3,7 +3,6 @@
 """
 Created on Tue Sep 18 12:56:53 2018
 
-@author: nsde
 """
 #%%
 import os

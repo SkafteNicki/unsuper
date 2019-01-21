@@ -3,7 +3,6 @@
 """
 Created on Fri Oct 12 12:18:28 2018
 
-@author: nsde
 """
 
 #%%
@@ -70,7 +69,7 @@ if __name__ == '__main__':
     print('Loading data')
     if args.dataset == 'mnist':
         transformations = transforms.Compose([ 
-            #transforms.RandomAffine(degrees=20, translate=(0.1,0.1)), 
+            transforms.RandomAffine(degrees=20, translate=(0.1,0.1)), 
             transforms.ToTensor(), 
         ])
         trainloader, testloader = mnist_data_loader(root='unsuper/data', 
@@ -80,14 +79,8 @@ if __name__ == '__main__':
                                                     num_points=args.num_points,
                                                     batch_size=args.batch_size)
         img_size = (1, 28, 28)
-    elif args.dataset == 'perception':
-        trainloader, testloader = perception_data_loader(root='unsuper/data', 
-                                                         transform=None,
-                                                         download=True,
-                                                         classes=args.classes,
-                                                         num_points=args.num_points,
-                                                         batch_size=args.batch_size)
-        img_size = (1, 400, 200)
+    else:
+        raise ValueError('unknown dataset')
 
     # Construct model
     model_class = get_model(args.model)
@@ -99,7 +92,7 @@ if __name__ == '__main__':
                         ST_type = args.stn_type)
     
     # Summary of model
-    #model_summary(model)
+    model_summary(model)
     
     # Optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)

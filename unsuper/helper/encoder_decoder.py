@@ -3,13 +3,12 @@
 """
 Created on Mon Nov  5 12:44:23 2018
 
-@author: nsde
 """
 
 #%%
 from torch import nn
 import numpy as np
-from ..helper.utility import CenterCrop, Flatten, BatchReshape
+from ..helper.utility import Flatten, BatchReshape
 
 #%%
 def get_encoder(encoder_name):
@@ -34,19 +33,19 @@ class mlp_encoder(nn.Module):
         self.flat_dim = np.prod(input_shape)
         self.encoder_mu = nn.Sequential(
             nn.BatchNorm1d(self.flat_dim),
-            nn.Linear(self.flat_dim, 512),
+            nn.Linear(self.flat_dim, 128),
             nn.LeakyReLU(),
-            nn.Linear(512, 256),
+            nn.Linear(128, 64),
             nn.LeakyReLU(),
-            nn.Linear(256, latent_dim)
+            nn.Linear(64, latent_dim)
         )
         self.encoder_var = nn.Sequential(
             nn.BatchNorm1d(self.flat_dim),
-            nn.Linear(self.flat_dim, 512),
+            nn.Linear(self.flat_dim, 128),
             nn.LeakyReLU(),
-            nn.Linear(512, 256),
+            nn.Linear(128, 64),
             nn.LeakyReLU(),
-            nn.Linear(256, latent_dim),
+            nn.Linear(64, latent_dim),
             nn.Softplus(),
         )
         
@@ -63,19 +62,19 @@ class mlp_decoder(nn.Module):
         self.flat_dim = np.prod(output_shape)
         self.output_shape = output_shape
         self.decoder_mu = nn.Sequential(
-            nn.Linear(latent_dim, 256),
+            nn.Linear(latent_dim, 64),
             nn.LeakyReLU(),
-            nn.Linear(256, 512),
+            nn.Linear(64, 128),
             nn.LeakyReLU(),
-            nn.Linear(512, self.flat_dim),
+            nn.Linear(256, self.flat_dim),
             outputnonlin
         )
         self.decoder_var = nn.Sequential(
-            nn.Linear(latent_dim, 256),
+            nn.Linear(latent_dim, 64),
             nn.LeakyReLU(),
-            nn.Linear(256, 512),
+            nn.Linear(64, 128),
             nn.LeakyReLU(),
-            nn.Linear(512, self.flat_dim),
+            nn.Linear(128, self.flat_dim),
             nn.Softplus()
         )
         

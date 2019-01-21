@@ -2,7 +2,6 @@
 """
 Created on Tue Nov  6 08:53:22 2018
 
-@author: nsde
 """
 
 #%%

@@ -3,7 +3,6 @@
 """
 Created on Tue Sep 18 12:48:18 2018
 
-@author: nsde
 """
 
 #%%
