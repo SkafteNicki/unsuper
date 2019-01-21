@@ -10,12 +10,11 @@ import torch
 import argparse, datetime
 from torchvision import transforms
 
-from unsuper.trainer import vae_trainer
-from unsuper.data.mnist_data_loader import mnist_data_loader
-from unsuper.data.perception_data_loader import perception_data_loader
-from unsuper.helper.utility import model_summary
-from unsuper.helper.encoder_decoder import get_encoder, get_decoder
-from unsuper.models import get_model
+from vitae.trainer import vae_trainer
+from vitae.data.mnist_data_loader import mnist_data_loader
+from vitae.helper.utility import model_summary
+from vitae.helper.encoder_decoder import get_encoder, get_decoder
+from vitae.models import get_model
 
 #%%
 def argparser():
