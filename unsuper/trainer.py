@@ -92,7 +92,7 @@ class vae_trainer:
             
                 # Feed forward data
                 data = data.reshape(-1, *self.input_shape).to(torch.float32).to(self.device)
-                switch = 1.0 if epoch > warmup else 0.0
+                switch = 0.0 # controls if we should learn the variance network
                 out = self.model(data, eq_samples, iw_samples, switch)
                 
                 # Calculat loss
