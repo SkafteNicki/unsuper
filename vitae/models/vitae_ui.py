@@ -76,17 +76,6 @@ class VITAE_UI(nn.Module):
             x_mean, _ = self.decoder2(z2)
             out_mean = self.stn(x_mean, theta_mean)
             return out_mean
-        
-    #%%
-    def special_sample(self, n):
-        device = next(self.parameters()).device
-        with torch.no_grad():
-            z1 = torch.randn(n, self.latent_dim, device=device)
-            z2 = torch.randn(n, self.latent_dim, device=device)
-            theta_mean, _ = self.decoder1(z1)
-            x_mean, _ = self.decoder2(z2)
-            out_mean = self.stn(x_mean, theta_mean)
-            return out_mean, [z1, z2]
 
     #%%
     def sample_only_trans(self, n, img):
@@ -118,16 +107,6 @@ class VITAE_UI(nn.Module):
             return theta.reshape(-1, 6)
     
     #%%
-    def semantics(self, x, eq_samples=1, iw_samples=1, switch=1.0):
-        mu1, var1 = self.encoder1(x)
-        z1 = self.reparameterize(mu1, var1, eq_samples, iw_samples)
-        theta_mean, theta_var = self.decoder1(z1)
-        mu2, var2 = self.encoder2(x)
-        z2 = self.reparameterize(mu2, var2, eq_samples, iw_samples)
-        x_mean, x_var = self.decoder2(z2)
-        return x_mean, x_var, [z1, z2], [mu1, mu2], [var1, var2]
-    
-    #%%
     def latent_representation(self, x):
         z_mu1, _ = self.encoder1(x)
         z_mu2, _ = self.encoder2(x)
@@ -153,19 +132,6 @@ class VITAE_UI(nn.Module):
         for i in range(theta.shape[1]):
             writer.add_histogram('transformation/a' + str(i), theta[:,i], 
                                  global_step=epoch, bins='auto')
-            writer.add_scalar('transformation/mean_a' + str(i), theta[:,i].mean(),
-                              global_step=epoch)
-        
-        # Also to a decomposition of the matrix and log these values
-        if self.stn.dim() == 6:
-            values = affine_decompose(theta.view(-1, 2, 3))
-            tags = ['sx', 'sy', 'm', 'theta', 'tx', 'ty']
-            for i in range(6):
-                writer.add_histogram('transformation/' + tags[i], values[i],
-                                     global_step=epoch, bins='auto')
-                writer.add_scalar('transformation/mean_' + tags[i], values[i].mean(),
-                                  global_step=epoch)
-            del values
         del theta
             
         # If 2d latent space we can make a fine meshgrid of sampled points

@@ -92,50 +92,12 @@ class ST_AffineDiff(nn.Module):
     
     def dim(self):
         return 6
-
-#%%
-try:
-    from libcpab import cpab
-
-    class ST_CPAB(nn.Module):
-        def __init__(self, input_shape):
-            super(ST_CPAB, self).__init__()
-            self.input_shape = input_shape
-            self.cpab = cpab([2,4], backend='pytorch', device='gpu',
-                             zero_boundary=True, 
-                             volume_perservation=False)
-        
-        def forward(self, x, theta, inverse=False):
-            if inverse:
-                theta = -theta
-            out = self.cpab.transform_data(data = x, 
-                                           theta = theta,    
-                                           outsize = self.input_shape[1:])
-            return out
-        
-        def trans_theta(self, theta):
-            return theta
-        
-        def dim(self):
-            return self.cpab.get_theta_dim()
-except Exception as e:
-    print('Could not import libcpab, error was')
-    print(e)
-    class ST_CPAB(nn.Module):
-        def __init__(self, input_shape):
-            super(ST_CPAB, self).__init__()
-            self.input_shape = input_shape
-            
-        def forward(self, x, theta, inverse=False):
-            raise ValueError('''libcpab was not correctly initialized, so you 
-                             cannot run with --stn_type cpab''')
     
 #%%
 def get_transformer(name):
     transformers = {'affine': ST_Affine,
                     'affinediff': ST_AffineDiff,
                     'affinedecomp': ST_AffineDecomp,
-                    'cpab': ST_CPAB
                     }
     assert (name in transformers), 'Transformer not found, choose between: ' \
             + ', '.join([k for k in transformers.keys()])

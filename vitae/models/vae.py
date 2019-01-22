@@ -55,22 +55,6 @@ class VAE(nn.Module):
             z = torch.randn(n, self.latent_dim, device=device)
             x_mu, x_var = self.decoder(z)
             return x_mu
-        
-    #%%
-    def special_sample(self, n):
-        device = next(self.parameters()).device
-        with torch.no_grad():
-            z = torch.randn(n, self.latent_dim, device=device)
-            x_mu, x_var = self.decoder(z)
-            return x_mu, [z]
-    
-    #%%
-    def semantics(self, x, eq_samples=1, iw_samples=1, switch=1.0):
-        z_mu, z_var = self.encoder(x)
-        z = self.reparameterize(z_mu, z_var, eq_samples, iw_samples)
-        x_mu, x_var = self.decoder(z)
-        x_var = switch*x_var + (1-switch)*(1**2)
-        return x_mu, x_var, [z], [z_mu], [z_var]
     
     #%%
     def latent_representation(self, x):
