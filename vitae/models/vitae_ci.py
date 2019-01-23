@@ -14,6 +14,8 @@ from ..helper.spatial_transformer import get_transformer
 
 #%%
 class VITAE_CI(nn.Module):
+    ''' Variational inferred transformational autoencoder with conditional 
+        inference structure '''
     def __init__(self, input_shape, latent_dim, encoder, decoder, outputdensity, ST_type, **kwargs):
         super(VITAE_CI, self).__init__()
         # Constants

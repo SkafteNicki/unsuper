@@ -14,7 +14,7 @@ from .helper.losses import vae_loss
 
 #%%
 class vae_trainer:
-    """ Main class for training the vae models 
+    """ Main class for training the different models 
     Arguments:
         input_shape: shape of a single image
         model: model (of type torch.nn.Module) to train

@@ -12,7 +12,8 @@ from .expm import torch_expm
 from .utility import construct_affine
 
 #%%
-def expm(theta): 
+def expm(theta):
+    ''' utility function '''
     n_theta = theta.shape[0] 
     zero_row = torch.zeros(n_theta, 1, 3, dtype=theta.dtype, device=theta.device) 
     theta = torch.cat([theta, zero_row], dim=1) 
@@ -22,6 +23,7 @@ def expm(theta):
 
 #%%
 class ST_Affine(nn.Module):
+    ''' Spatial transformer with affine transformation '''
     def __init__(self, input_shape):
         super(ST_Affine, self).__init__()
         self.input_shape = input_shape
@@ -48,6 +50,7 @@ class ST_Affine(nn.Module):
 
 #%%
 class ST_AffineDecomp(nn.Module):
+    ''' Spatial transformer with decomposed affine transformation '''
     def __init__(self, input_shape):
         super(ST_AffineDecomp, self).__init__()
         self.input_shape = input_shape
@@ -73,6 +76,7 @@ class ST_AffineDecomp(nn.Module):
 
 #%%
 class ST_AffineDiff(nn.Module):
+    ''' Spatial transformer with diffiomorphic affine transformation '''
     def __init__(self, input_shape):
         super(ST_AffineDiff, self).__init__()
         self.input_shape = input_shape
@@ -95,6 +99,7 @@ class ST_AffineDiff(nn.Module):
     
 #%%
 def get_transformer(name):
+    ''' utility function '''
     transformers = {'affine': ST_Affine,
                     'affinediff': ST_AffineDiff,
                     'affinedecomp': ST_AffineDecomp,

@@ -13,6 +13,7 @@ from torchvision.utils import make_grid
 
 #%%
 class VAE(nn.Module):
+    ''' Standard variational autoencoder '''    
     def __init__(self, input_shape, latent_dim, encoder, decoder, outputdensity, **kwargs):
         super(VAE, self).__init__()
         # Constants
